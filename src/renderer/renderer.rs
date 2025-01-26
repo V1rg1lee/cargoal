@@ -26,20 +26,20 @@ impl TemplateRenderer {
     /// - template_name: &str
     /// - context: &HashMap<&str, &str>
     /// ## Returns
-    /// - String
+    /// - Result<String, String>
     /// ## Panics
     /// - If the template is not found in any of the configured directories
-    pub fn render(&self, template_name: &str, context: &HashMap<&str, &str>) -> String {
+    pub fn render(&self, template_name: &str, context: &HashMap<&str, &str>) -> Result<String, String> {
         let template_content = self.find_template(template_name)
-            .unwrap_or_else(|| panic!("Template {} not found in any configured directories!", template_name));
-
+            .ok_or_else(|| format!("Template '{}' not found in any configured directories!", template_name))?;
+    
         let mut rendered = template_content;
         for (key, value) in context {
             let placeholder = format!("{{{{ {} }}}}", key);
             rendered = rendered.replace(&placeholder, value);
         }
-
-        rendered
+    
+        Ok(rendered)
     }
 
     /// Find a template in the configured directories

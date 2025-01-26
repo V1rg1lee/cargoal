@@ -1,10 +1,11 @@
 use super::super::routing::Router;
-use super::super::http::request::Request;
 use super::super::http::response::Response;
 use super::super::http::method::HttpMethod;
 use super::super::http::request::parse_request;
 use super::super::http::response::format_response;
 use super::super::super::renderer::renderer::TemplateRenderer;
+use super::super::routing::routeBuilder::RouteBuilder;
+use super::super::routing::groupBuilder::GroupBuilder;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
@@ -30,8 +31,12 @@ impl Server {
         Self {
             address: address.to_string(),
             router: Router::new(),
-            template_dirs: Vec::new(),
+            template_dirs: vec!["templates".to_string()],
         }
+    }
+
+    pub fn route<'a>(&'a mut self, path: &'a str, method: HttpMethod) -> RouteBuilder<'a> {
+        RouteBuilder::new(path, method, self)
     }
 
     /// Initialize the Server with the given template directories
@@ -53,48 +58,21 @@ impl Server {
         TemplateRenderer::new(self.template_dirs.iter().map(String::as_str).collect())
     }
 
-    /// Add a middleware to the Server
+    /// Add a group of routes to the server
     /// ## Args
-    /// - middleware: Middleware
+    /// - self
+    /// - prefix: &str
+    /// - group: F
+    /// ## Where
+    /// - F: FnOnce(&mut GroupBuilder)
     /// ## Returns
-    /// - Server
-    pub fn with_group<F>(mut self, prefix: &str, group: F) -> Self
+    /// - &mut Self
+    pub fn with_group<F>(&mut self, prefix: &str, group: F) -> &mut Self
     where
-        F: FnOnce(&mut Router),
+        F: FnOnce(&mut GroupBuilder),
     {
-        let mut sub_router = Router::new();
-        group(&mut sub_router);
-
-        for route in sub_router.routes {
-            // Add the route with the prefix
-            self.router.add_route(
-                route.subdomain.as_deref(),
-                &format!("{}{}", prefix, route.path),
-                route.method,
-                route.handler,
-                route.description.as_deref(),
-            );
-        }
-        self
-    }
-
-    /// Add a middleware to the Server
-    /// ## Args
-    /// - middleware: Middleware
-    /// ## Returns
-    /// - Server
-    pub fn with_route<F>(
-        mut self,
-        subdomain: Option<&str>,
-        path: &str,
-        method: HttpMethod,
-        handler: F,
-        description: Option<&str>,
-    ) -> Self
-    where
-        F: Fn(Request) -> Response + Send + Sync + 'static,
-    {
-        self.router.add_route(subdomain, path, method, handler, description);
+        let mut group_builder = GroupBuilder::new(prefix, self);
+        group(&mut group_builder);
         self
     }
 
