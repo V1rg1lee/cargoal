@@ -80,7 +80,7 @@ mod tests {
             .send()
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response.text().unwrap().contains("Details about user ID: 42"));
+        assert!(response.text().unwrap().contains("Details about ID: 42"));
     }
 
     #[test]
@@ -261,7 +261,70 @@ mod tests {
 
 }
 
-pub fn test(port: u16) {
+
+fn home_page_handler(_req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    cargoal::routes::http::response::Response::new(
+        200,
+        Some("Hello, world! Welcome to the home page.".to_string()),
+    )
+    .with_header("Content-Type", "text/plain")
+}
+
+fn query_test_handler(req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    if let Some(name) = req.params.get("name") {
+        cargoal::routes::http::response::Response::new(200, Some(format!("Hello, {}!", name)))
+    } else {
+        cargoal::routes::http::response::Response::new(400, Some("Missing 'name' parameter".to_string()))
+    }
+}
+
+fn about_page_handler(_req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    cargoal::routes::http::response::Response::new(
+        200,
+        Some("This is the about page.".to_string()),
+    )
+    .with_header("Content-Type", "text/plain")
+}
+
+fn submit_handler(req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    if let Some(body) = &req.body {
+        cargoal::routes::http::response::Response::new(
+            200,
+            Some(format!("Received body: {}", body)),
+        )
+        .with_header("Content-Type", "text/plain")
+    } else {
+        cargoal::routes::http::response::Response::new(400, Some("No body provided".to_string()))
+    }
+}
+
+fn about_id_handler(req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    if let Some(id) = req.params.get("id") {
+        if id.is_empty() {
+            cargoal::routes::http::response::Response::new(400, Some("Bad Request: ID cannot be empty".to_string()))
+        } else {
+            cargoal::routes::http::response::Response::new(
+                200,
+                Some(format!("Details about ID: {}", id)),
+            )
+            .with_header("Content-Type", "application/json")
+        }
+    } else {
+        cargoal::routes::http::response::Response::new(400, Some("Bad Request: Missing ID".to_string()))
+    }
+}
+
+fn options_handler(_req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    cargoal::routes::http::response::Response::new(200, Some("Available methods: GET, POST".to_string()))
+        .with_header("Allow", "GET, POST")
+}
+
+fn log_handler(req: cargoal::routes::http::request::Request) -> cargoal::routes::http::response::Response {
+    println!("Middleware log: Path accessed: {}", req.path);
+    cargoal::routes::http::response::Response::new(200, Some("Middleware executed!".to_string()))
+}
+
+fn test(port: u16) {
     let mut server = cargoal::routes::server::Server::new(&format!("127.0.0.1:{}", port));
 
     server.router.add_middleware(|req| {
@@ -271,93 +334,62 @@ pub fn test(port: u16) {
 
     server.router.add_middleware(|req| {
         if req.path == "/middleware-block" {
-            Some(cargoal::routes::http::response::Response::new(403, Some("Forbidden by middleware".to_string())))
+            Some(cargoal::routes::http::response::Response::new(
+                403,
+                Some("Forbidden by middleware".to_string()),
+            ))
         } else {
             None
         }
-    });    
+    });
 
     server = server
-        // Home page on www subdomain
         .with_route(
             Some("www"),
             "/",
             cargoal::routes::http::method::HttpMethod::GET,
-            |req| {
-                cargoal::routes::http::response::Response::new(200, Some("Hello, world! Welcome to the home page.".to_string()))
-                    .with_header("Content-Type", "text/plain")
-            },
+            home_page_handler,
             Some("Home page on www subdomain"),
         )
-        // With query parameters
         .with_route(
             None,
             "/query-test",
             cargoal::routes::http::method::HttpMethod::GET,
-            |req| {
-                println!("Handler received params: {:?}", req.params);
-                if let Some(name) = req.params.get("name") {
-                    cargoal::routes::http::response::Response::new(200, Some(format!("Hello, {}!", name)))
-                } else {
-                    cargoal::routes::http::response::Response::new(400, Some("Missing 'name' parameter".to_string()))
-                }
-            },
+            query_test_handler,
             Some("Test query parameters"),
         )
-        // Base about page
         .with_route(
             None,
             "/about",
             cargoal::routes::http::method::HttpMethod::GET,
-            |req| {
-                cargoal::routes::http::response::Response::new(200, Some("This is the about page.".to_string()))
-                    .with_header("Content-Type", "text/plain")
-            },
+            about_page_handler,
             Some("About page available globally"),
         )
-        // POST route with body
         .with_route(
             Some("api"),
             "/submit",
             cargoal::routes::http::method::HttpMethod::POST,
-            |req| {
-                if let Some(body) = &req.body {
-                    cargoal::routes::http::response::Response::new(200, Some(format!("Received body: {}", body)))
-                        .with_header("Content-Type", "text/plain")
-                } else {
-                    cargoal::routes::http::response::Response::new(400, Some("No body provided".to_string()))
-                }
-            },
+            submit_handler,
             Some("Endpoint to test request body handling"),
         )
-        // Dynamic route with parameter
         .with_route(
             Some("api"),
             "/about/:id",
             cargoal::routes::http::method::HttpMethod::GET,
-            |req| {
-                if let Some(id) = req.params.get("id") {
-                    if id.is_empty() {       
-                        cargoal::routes::http::response::Response::new(400, Some("Bad Request: ID cannot be empty".to_string()))
-                    } else {
-                        cargoal::routes::http::response::Response::new(200, Some(format!("Details about ID: {}", req.params.get("id").unwrap())))
-                            .with_header("Content-Type", "application/json")
-                    }
-                } else {
-                    cargoal::routes::http::response::Response::new(400, Some("Bad Request: Missing ID".to_string()))
-                }
-            },
+            about_id_handler,
             Some("Fetch details about a specific ID in /about/:id"),
         )
-        // Group of routes under "/v1" under "api"
         .with_group("/v1", |router| {
             router.add_route(
                 Some("api"),
                 "/users",
                 cargoal::routes::http::method::HttpMethod::GET,
                 |req| {
-                    cargoal::routes::http::response::Response::new(200, Some("[{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]".to_string()))
-                        .with_header("Content-Type", "application/json")
+                    cargoal::routes::http::response::Response::new(
+                        200,
+                        Some("[{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]".to_string()),
+                    )
+                    .with_header("Content-Type", "application/json")
                 },
                 Some("Get the list of users"),
             );
@@ -365,38 +397,23 @@ pub fn test(port: u16) {
                 Some("api"),
                 "/users/:id",
                 cargoal::routes::http::method::HttpMethod::GET,
-                |req| {
-                    if let Some(id) = req.params.get("id") {
-                        cargoal::routes::http::response::Response::new(200, Some(format!("Details about user ID: {}", id)))
-                            .with_header("Content-Type", "application/json")
-                    } else {
-                        cargoal::routes::http::response::Response::new(400, Some("Bad Request: Missing user ID".to_string()))
-                    }
-                },
+                about_id_handler,
                 Some("Fetch details about a specific user ID"),
             );
         })
-        // OPTIONS for "/options-test" under "api"
         .with_route(
             Some("api"),
             "/options-test",
             cargoal::routes::http::method::HttpMethod::OPTIONS,
-            |req| {
-                cargoal::routes::http::response::Response::new(200, Some("Available methods: GET, POST".to_string()))
-                    .with_header("Allow", "GET, POST")
-            },
+            options_handler,
             Some("Options endpoint for testing HTTP OPTIONS method"),
         )
-        // Middleware pour journalisation (exemple simplifié)
         .with_group("/middleware-test", |router| {
             router.add_route(
                 None,
                 "/log",
                 cargoal::routes::http::method::HttpMethod::GET,
-                |req| {
-                    println!("Middleware log: Path accessed: {}", req.path);
-                    cargoal::routes::http::response::Response::new(200, Some("Middleware executed!".to_string()))
-                },
+                log_handler,
                 Some("Test middleware execution"),
             );
         });
