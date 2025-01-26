@@ -4,6 +4,7 @@ use super::super::http::response::Response;
 use super::super::http::method::HttpMethod;
 use super::super::http::request::parse_request;
 use super::super::http::response::format_response;
+use super::super::super::renderer::renderer::TemplateRenderer;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
@@ -11,9 +12,11 @@ use std::io::{Read, Write};
 /// ## Fields
 /// - address: String
 /// - router: Router
+/// - template_dirs: Vec<String>
 pub struct Server {
-    pub address: String,
+    address: String,
     pub router: Router,
+    pub template_dirs: Vec<String>,
 }
 
 /// Implement the Server struct
@@ -27,7 +30,27 @@ impl Server {
         Self {
             address: address.to_string(),
             router: Router::new(),
+            template_dirs: Vec::new(),
         }
+    }
+
+    /// Initialize the Server with the given template directories
+    /// ## Args
+    /// - dirs: Vec<&str>
+    /// ## Returns
+    /// - Server
+    pub fn with_template_dirs(mut self, dirs: Vec<&str>) -> Self {
+        self.template_dirs = dirs.into_iter().map(String::from).collect();
+        self
+    }
+
+    /// Get the TemplateRenderer for the Server
+    /// ## Args
+    /// - self
+    /// ## Returns
+    /// - TemplateRenderer
+    pub fn get_template_renderer(&self) -> TemplateRenderer {
+        TemplateRenderer::new(self.template_dirs.iter().map(String::as_str).collect())
     }
 
     /// Add a middleware to the Server
