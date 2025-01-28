@@ -28,5 +28,7 @@ fn test_dynamic_route() {
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.text().unwrap().contains("Details about ID: 123"));
+    let response_text = response.text().unwrap();
+    println!("{}", response_text);
+    assert!(response_text.contains("Details about ID: 123"));
 }

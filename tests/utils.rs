@@ -96,18 +96,11 @@ fn test(port: u16) {
         .with_subdomain("api")
         .with_handler(|req| {
             if let Some(id) = req.params.get("id") {
-                if id.is_empty() {
-                    Response::new(
-                        400,
-                        Some("Bad Request: ID cannot be empty".to_string()),
-                    )
-                } else {
-                    Response::new(
-                        200,
-                        Some(format!("Details about ID: {}", id)),
-                    )
-                    .with_header("Content-Type", "application/json")
-                }
+                Response::new(
+                    200,
+                    Some(format!("Details about ID: {}", id)),
+                )
+                .with_header("Content-Type", "application/json")
             } else {
                 Response::new(
                     400,
@@ -133,6 +126,7 @@ fn test(port: u16) {
 
         group
             .route("/users/:id", HttpMethod::GET)
+            .with_regex(r"^/v1/users/(?P<id>\d+)$")
             .with_subdomain("api")
             .with_handler(|req| {
                 if let Some(id) = req.params.get("id") {
@@ -146,6 +140,36 @@ fn test(port: u16) {
                         400,
                         Some("Missing user ID".to_string()),
                     )
+                }
+            })
+            .register();
+
+        group
+            .route("/orders/:order_id", HttpMethod::GET)
+            .with_regex(r"^/v1/orders/(?P<order_id>[a-zA-Z0-9_-]+)$")
+            .with_handler(|req| {
+                if let Some(order_id) = req.params.get("order_id") {
+                    Response::new(
+                        200,
+                        Some(format!("Details about order ID: {}", order_id)),
+                    )
+                } else {
+                    Response::new(400, Some("Missing order ID".to_string()))
+                }
+            })
+            .register();
+
+        group
+            .route("/items/:name", HttpMethod::GET)
+            .with_regex(r"^/v1/items/(?P<name>[a-zA-Z]+)$")
+            .with_handler(|req| {
+                if let Some(name) = req.params.get("name") {
+                    Response::new(
+                        200,
+                        Some(format!("Details about item name: {}", name)),
+                    )
+                } else {
+                    Response::new(400, Some("Missing item name".to_string()))
                 }
             })
             .register();

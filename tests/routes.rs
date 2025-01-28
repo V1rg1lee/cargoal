@@ -93,8 +93,8 @@ fn test_bad_request_missing_param() {
         .header("X-Mock-Subdomain", "api")
         .send()
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert!(response.text().unwrap().contains("Bad Request: ID cannot be empty"));
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(response.text().unwrap().contains("Not Found"));
 }
 
 #[test]

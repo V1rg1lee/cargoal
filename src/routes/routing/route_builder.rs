@@ -13,6 +13,7 @@ use std::collections::HashMap;
 /// - server: &'a mut Server
 /// - handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>
 /// - subdomain: Option<String>
+/// - regex: Option<&'a str>
 pub struct RouteBuilder<'a> {
     path: &'a str,
     method: HttpMethod,
@@ -21,6 +22,7 @@ pub struct RouteBuilder<'a> {
     server: &'a mut Server,
     handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>,
     subdomain: Option<String>,
+    regex: Option<&'a str>,
 }
 
 /// Implement the RouteBuilder struct
@@ -41,6 +43,7 @@ impl<'a> RouteBuilder<'a> {
             server,
             handler: None,
             subdomain: None,
+            regex: None,
         }
     }
 
@@ -82,6 +85,17 @@ impl<'a> RouteBuilder<'a> {
         self
     }
 
+    /// Set the regex for the Route
+    /// ## Args
+    /// - self
+    /// - regex: &'a str
+    /// ## Returns
+    /// - RouteBuilder
+    pub fn with_regex(mut self, regex: &'a str) -> Self {
+        self.regex = Some(regex);
+        self
+    }
+
     /// Set the handler for the Route
     /// ## Args
     /// - self
@@ -108,6 +122,7 @@ impl<'a> RouteBuilder<'a> {
         let context_fn = self.context_fn;
         let handler = self.handler;
         let subdomain = self.subdomain;
+        let regex = self.regex;
     
         // Prepare the route
         let renderer = self.server.get_template_renderer(); // Obtenez un renderer
@@ -139,7 +154,7 @@ impl<'a> RouteBuilder<'a> {
     
                 Response::new(200, Some(rendered)).with_header("Content-Type", "text/html")
             },
-            None,
+            regex.as_deref(),
         );
     } 
 }

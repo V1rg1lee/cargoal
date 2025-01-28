@@ -157,13 +157,25 @@ impl Server {
     
         // Search for a matching route
         if let Some(route) = self.router.find_route(&request.path, &request.method, subdomain.as_deref()) {
+            if let Some(regex) = &route.regex {
+                if !regex.is_match(&request.path) { // Check if the path matches the regex, if not return 404
+                    let response = Response::new(404, Some("Not Found".to_string()));
+                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.flush().unwrap();
+                    return;
+                }
+            }
+
             // Add the route params to the request
-            let route_params = self.router.extract_params(&route.path, &request.path);
+            let route_params = self.router.extract_params(route, &request.path);
             request.params.extend(route_params);
     
             let response = (route.handler)(request);
             stream.write(format_response(response).as_bytes()).unwrap();
-        } else if let Some(_) = self.router.find_route_by_path_and_subdomain(&request.path, subdomain.as_deref()) {
+        } else if self.router.routes.iter().any(|route| {
+            route.subdomain.as_deref() == subdomain.as_deref()
+                && route.path == request.path
+        }) {
             let allowed_methods = self
                 .router
                 .get_allowed_methods(&request.path, subdomain.as_deref());
@@ -172,7 +184,7 @@ impl Server {
                 .map(|method| method.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-    
+        
             let response = Response::new(405, Some("Method Not Allowed".to_string()))
                 .with_header("Allow", &allow_header);
             stream.write(format_response(response).as_bytes()).unwrap();
