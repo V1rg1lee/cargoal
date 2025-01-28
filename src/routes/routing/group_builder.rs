@@ -1,6 +1,6 @@
 use super::super::http::method::HttpMethod;
 use super::super::server::Server;
-use super::routeBuilder::RouteBuilder;
+use super::route_builder::RouteBuilder;
 
 /// Define the GroupBuilder struct
 /// ## Fields

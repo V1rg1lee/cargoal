@@ -4,8 +4,8 @@ use super::super::http::method::HttpMethod;
 use super::super::http::request::parse_request;
 use super::super::http::response::format_response;
 use super::super::super::renderer::renderer::TemplateRenderer;
-use super::super::routing::routeBuilder::RouteBuilder;
-use super::super::routing::groupBuilder::GroupBuilder;
+use super::super::routing::route_builder::RouteBuilder;
+use super::super::routing::group_builder::GroupBuilder;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
@@ -122,6 +122,11 @@ impl Server {
                 } else {
                     None
                 }
+            })
+            .or_else(|| { // Extract the subdomain from the X-Mock-Subdomain header (for testing)
+                request_str.lines()
+                           .find(|line| line.to_lowercase().starts_with("x-mock-subdomain:"))
+                           .and_then(|line| line.split_whitespace().nth(1).map(String::from))
             });
     
         println!("Subdomain: {:?}", subdomain);
