@@ -4,6 +4,7 @@ use super::super::http::response::Response;
 use super::super::server::Server;
 use super::middleware::Middleware;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Define the RouteBuilder struct
 /// ## Fields
@@ -103,11 +104,16 @@ impl<'a> RouteBuilder<'a> {
     /// Add a Middleware to the Route
     /// ## Args
     /// - self
-    /// - middleware: Middleware
+    /// - middleware: F
+    /// ## Where
+    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
     /// ## Returns
     /// - RouteBuilder
-    pub fn with_middleware(mut self, middleware: Middleware) -> Self {
-        self.middlewares.push(middleware);
+    pub fn with_middleware<F>(mut self, middleware: F) -> Self 
+    where
+        F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
+    {
+        self.middlewares.push(Arc::new(middleware));
         self
     }
 

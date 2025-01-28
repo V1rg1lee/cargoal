@@ -3,6 +3,8 @@ use super::super::server::Server;
 use super::route_builder::RouteBuilder;
 use super::middleware::Middleware;
 use std::sync::Arc;
+use super::super::http::request::Request;
+use super::super::http::response::Response;
 
 /// Define the GroupBuilder struct
 /// ## Fields
@@ -42,7 +44,8 @@ impl<'a> GroupBuilder<'a> {
         let mut route_builder = self.server.route(Box::leak(full_path.into_boxed_str()), method);
     
         for middleware in &self.middlewares {
-            route_builder = route_builder.with_middleware(Arc::clone(middleware));
+            let middleware_ref = Arc::clone(middleware);
+            route_builder = route_builder.with_middleware(move |req| middleware_ref(req));
         }
     
         route_builder
@@ -50,12 +53,16 @@ impl<'a> GroupBuilder<'a> {
 
     /// Add a middleware to the Group
     /// ## Args
-    /// - middleware: Middleware
+    /// - middleware: F
+    /// ## Where
+    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
     /// ## Returns
     /// - &mut Self
-    pub fn add_middleware(&mut self, middleware: Middleware) -> &mut Self
+    pub fn add_middleware<F>(&mut self, middleware: F) -> &mut Self
+    where
+    F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
     {
-        self.middlewares.push(middleware);
+        self.middlewares.push(Arc::new(middleware));
         self
     }
 }
