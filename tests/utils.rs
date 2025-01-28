@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use cargoal::routes::server::Server;
 use cargoal::routes::http::method::HttpMethod;
 use cargoal::routes::http::response::Response;
+use std::sync::Arc;
 
 #[cfg(test)]
 pub fn start_test_server(port: u16) {
@@ -195,6 +196,34 @@ fn test(port: u16) {
             )
         })
         .register();
+
+    app.route("/middleware-block-2", HttpMethod::GET)
+       .with_middleware(Arc::new(|_req| {
+           Some(Response::new(
+               403,
+               Some("Forbidden by middleware".to_string()),
+           ))
+        })) 
+        .register();
+
+    app.with_group("/middleware-block-3", |group| {
+        group.add_middleware(Arc::new(|_req| {
+            Some(Response::new(
+                403,
+                Some("Forbidden by middleware".to_string()),
+            ))
+        }));
+
+        group
+            .route("/block", HttpMethod::GET)
+            .with_handler(|_req| {
+                Response::new(
+                    200,
+                    Some("This should not be reached".to_string()),
+                )
+            })
+            .register();
+    });
 
     // Start the server
     println!("Server running with all routes set up.");

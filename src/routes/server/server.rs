@@ -166,6 +166,15 @@ impl Server {
                 }
             }
 
+            // Middleware execution
+            for middleware in &route.middlewares {
+                if let Some(response) = middleware(&request) {
+                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.flush().unwrap();
+                    return;
+                }
+            }
+
             // Add the route params to the request
             let route_params = self.router.extract_params(route, &request.path);
             request.params.extend(route_params);

@@ -3,9 +3,8 @@ use super::super::http::method::HttpMethod;
 use super::super::http::request::Request;
 use super::super::http::response::Response;
 use regex::Regex;
-
-/// Define the Middleware type
-pub type Middleware = Box<dyn Fn(&Request) -> Option<Response> + Send + Sync>;
+use super::middleware::Middleware;
+use std::sync::Arc;
 
 /// Define the Router struct
 /// ## Fields
@@ -31,6 +30,7 @@ impl Router {
     /// - path: &str
     /// - method: HttpMethod
     /// - handler: F
+    /// - regex: Option<&str>
     /// ## Where
     /// - F: Fn(Request) -> Response + Send + Sync + 'static
     /// ## Returns
@@ -65,6 +65,7 @@ impl Router {
             method,
             handler: Box::new(handler),
             regex: compiled_regex.or(compiled_dynamic_regex),
+            middlewares: Vec::new(),
         });
     }
 
@@ -98,7 +99,26 @@ impl Router {
     where
         F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
     {
-        self.middlewares.push(Box::new(middleware));
+        self.middlewares.push(Arc::new(middleware));
+    }
+
+    /// Add a middleware to a route
+    /// ## Args
+    /// - path: &str
+    /// - middleware: F
+    /// ## Where
+    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
+    /// ## Returns
+    /// - ()
+    /// ## Side Effects
+    /// - Adds a Middleware to a Route
+    pub fn add_route_middleware<F>(&mut self, path: &str, middleware: F)
+    where
+        F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
+    {
+        if let Some(route) = self.routes.iter_mut().find(|route| route.path == path) {
+            route.middlewares.push(Arc::new(middleware));
+        }
     }
 
     /// Find a route by path, method, and subdomain

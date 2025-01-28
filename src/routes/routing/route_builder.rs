@@ -2,6 +2,7 @@ use super::super::http::method::HttpMethod;
 use super::super::http::request::Request;
 use super::super::http::response::Response;
 use super::super::server::Server;
+use super::middleware::Middleware;
 use std::collections::HashMap;
 
 /// Define the RouteBuilder struct
@@ -14,6 +15,7 @@ use std::collections::HashMap;
 /// - handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>
 /// - subdomain: Option<String>
 /// - regex: Option<&'a str>
+/// - middlewares: Vec<Middleware>
 pub struct RouteBuilder<'a> {
     path: &'a str,
     method: HttpMethod,
@@ -23,6 +25,7 @@ pub struct RouteBuilder<'a> {
     handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>,
     subdomain: Option<String>,
     regex: Option<&'a str>,
+    middlewares: Vec<Middleware>,
 }
 
 /// Implement the RouteBuilder struct
@@ -44,6 +47,7 @@ impl<'a> RouteBuilder<'a> {
             handler: None,
             subdomain: None,
             regex: None,
+            middlewares: Vec::new(),
         }
     }
 
@@ -79,7 +83,7 @@ impl<'a> RouteBuilder<'a> {
     /// - RouteBuilder
     pub fn with_context<F>(mut self, context_fn: F) -> Self
     where
-        F: Fn(&Request) -> HashMap<&'static str, String> + Send + Sync + 'static,
+        F: Fn(&Request) -> HashMap<&'static str, String> + Send + Sync + 'static, 
     {
         self.context_fn = Some(Box::new(context_fn));
         self
@@ -93,6 +97,17 @@ impl<'a> RouteBuilder<'a> {
     /// - RouteBuilder
     pub fn with_regex(mut self, regex: &'a str) -> Self {
         self.regex = Some(regex);
+        self
+    }
+
+    /// Add a Middleware to the Route
+    /// ## Args
+    /// - self
+    /// - middleware: Middleware
+    /// ## Returns
+    /// - RouteBuilder
+    pub fn with_middleware(mut self, middleware: Middleware) -> Self {
+        self.middlewares.push(middleware);
         self
     }
 
@@ -123,9 +138,10 @@ impl<'a> RouteBuilder<'a> {
         let handler = self.handler;
         let subdomain = self.subdomain;
         let regex = self.regex;
+        let middlewares = self.middlewares.clone();
     
         // Prepare the route
-        let renderer = self.server.get_template_renderer(); // Obtenez un renderer
+        let renderer = self.server.get_template_renderer(); 
         let path = self.path.to_string();
         let method = self.method.clone();
     
@@ -135,6 +151,12 @@ impl<'a> RouteBuilder<'a> {
             &path,
             method,
             move |req: Request| {
+                for middleware in &middlewares {
+                    if let Some(response) = middleware(&req) {
+                        return response;
+                    }
+                }
+                
                 // If a handler is set, use it
                 if let Some(handler) = &handler {
                     return handler(req);
@@ -149,7 +171,15 @@ impl<'a> RouteBuilder<'a> {
                     .as_ref()
                     .map_or_else(
                         || "Template not set.".to_string(),
-                        |t| renderer.render(t, &context).unwrap_or("Error rendering template.".to_string()),
+                        |t| {
+                            match renderer.render(t, &context) {
+                                Ok(output) => output,
+                                Err(err) => {
+                                    eprintln!("Error rendering template '{}': {}", t, err);
+                                    "Error rendering template.".to_string()
+                                }
+                            }
+                        },
                     );
     
                 Response::new(200, Some(rendered)).with_header("Content-Type", "text/html")
