@@ -1,10 +1,10 @@
-use super::super::http::method::HttpMethod;
 use super::super::server::Server;
 use super::route_builder::RouteBuilder;
 use super::middleware::Middleware;
+use super::super::http::Request;
+use super::super::http::Response;
+use super::super::http::HttpMethod;
 use std::sync::Arc;
-use super::super::http::request::Request;
-use super::super::http::response::Response;
 
 /// Define the GroupBuilder struct
 /// ## Fields

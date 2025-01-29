@@ -32,7 +32,7 @@ impl HttpMethod {
     /// - method: &str
     /// ## Returns
     /// - HttpMethod 
-    pub fn from_str(method: &str) -> Self {
+    pub(crate) fn from_str(method: &str) -> Self {
         match method {
             "GET" => HttpMethod::GET,
             "POST" => HttpMethod::POST,

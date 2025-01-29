@@ -1,4 +1,4 @@
-use super::method::HttpMethod;
+use super::HttpMethod;
 
 /// Define the Request struct
 /// ## Fields
@@ -18,7 +18,7 @@ pub struct Request {
 /// - request: &str
 /// ## Returns
 /// - Request
-pub fn parse_request(request: &str) -> Request {
+pub(crate) fn parse_request(request: &str) -> Request {
     let lines: Vec<&str> = request.lines().collect();
     let first_line = lines[0];
     let parts: Vec<&str> = first_line.split_whitespace().collect();

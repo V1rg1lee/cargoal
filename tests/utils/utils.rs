@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 use cargoal::routes::server::Server;
-use cargoal::routes::http::method::HttpMethod;
+use cargoal::routes::http::HttpMethod;
 use super::middlewares::{logging_middleware, block_middleware, block_middleware_group};
 use super::handlers::{home_handler, about_handler, query_test_handler, submit_handler, user_handler, users_handler, order_handler, item_handler, options_test_handler, middleware_test_handler, this_should_not_be_reached_handler};
 

@@ -42,7 +42,7 @@ impl Response {
 /// - response: Response
 /// ## Returns
 /// - String
-pub fn format_response(response: Response) -> String {
+pub(crate) fn format_response(response: Response) -> String {
     let mut response_str = format!("HTTP/1.1 {} OK\r\n", response.status_code);
 
     for (key, value) in response.headers {

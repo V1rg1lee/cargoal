@@ -1,11 +1,11 @@
 use super::super::routing::Router;
-use super::super::http::response::Response;
-use super::super::http::method::HttpMethod;
+use super::super::http::Response;
+use super::super::http::HttpMethod;
 use super::super::http::request::parse_request;
 use super::super::http::response::format_response;
 use super::super::super::renderer::renderer::TemplateRenderer;
-use super::super::routing::route_builder::RouteBuilder;
-use super::super::routing::group_builder::GroupBuilder;
+use super::super::routing::RouteBuilder;
+use super::super::routing::GroupBuilder;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 pub struct Server {
     address: String,
     pub router: Router,
-    pub template_dirs: Vec<String>,
+    pub(crate) template_dirs: Vec<String>,
 }
 
 /// Implement the Server struct
@@ -54,7 +54,7 @@ impl Server {
     /// - self
     /// ## Returns
     /// - TemplateRenderer
-    pub fn get_template_renderer(&self) -> TemplateRenderer {
+    pub(crate) fn get_template_renderer(&self) -> TemplateRenderer {
         TemplateRenderer::new(self.template_dirs.iter().map(String::as_str).collect())
     }
 

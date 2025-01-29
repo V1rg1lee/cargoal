@@ -1,7 +1,7 @@
-use super::route::Route;
-use super::super::http::method::HttpMethod;
-use super::super::http::request::Request;
-use super::super::http::response::Response;
+use super::Route;
+use super::super::http::HttpMethod;
+use super::super::http::Request;
+use super::super::http::Response;
 use regex::Regex;
 use super::middleware::Middleware;
 use std::sync::Arc;
@@ -11,8 +11,8 @@ use std::sync::Arc;
 /// - routes: Vec<Route>
 /// - middlewares: Vec<Middleware>
 pub struct Router {
-    pub routes: Vec<Route>,
-    pub middlewares: Vec<Middleware>,
+    pub(crate) routes: Vec<Route>,
+    pub(crate) middlewares: Vec<Middleware>,
 }
 
 /// Implement the Router struct
@@ -20,7 +20,7 @@ impl Router {
     /// Create a new Router instance
     /// ## Returns
     /// - Router
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { routes: Vec::new(), middlewares: Vec::new() }
     }
 
@@ -37,7 +37,7 @@ impl Router {
     /// - ()
     /// ## Side Effects
     /// - Adds a Route to the Router
-    pub fn add_route<F>(&mut self, subdomain: Option<&str>, path: &str, method: HttpMethod, handler: F, regex: Option<&str>)
+    pub(crate) fn add_route<F>(&mut self, subdomain: Option<&str>, path: &str, method: HttpMethod, handler: F, regex: Option<&str>)
     where
         F: Fn(Request) -> Response + Send + Sync + 'static,
     {
@@ -75,7 +75,7 @@ impl Router {
     /// - subdomain: Option<&str>
     /// ## Returns
     /// - Vec<HttpMethod>
-    pub fn get_allowed_methods(&self, path: &str, subdomain: Option<&str>) -> Vec<HttpMethod> {
+    pub(crate) fn get_allowed_methods(&self, path: &str, subdomain: Option<&str>) -> Vec<HttpMethod> {
         self.routes
             .iter()
             .filter(|route| {
@@ -102,25 +102,6 @@ impl Router {
         self.middlewares.push(Arc::new(middleware));
     }
 
-    /// Add a middleware to a route
-    /// ## Args
-    /// - path: &str
-    /// - middleware: F
-    /// ## Where
-    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
-    /// ## Returns
-    /// - ()
-    /// ## Side Effects
-    /// - Adds a Middleware to a Route
-    pub fn add_route_middleware<F>(&mut self, path: &str, middleware: F)
-    where
-        F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
-    {
-        if let Some(route) = self.routes.iter_mut().find(|route| route.path == path) {
-            route.middlewares.push(Arc::new(middleware));
-        }
-    }
-
     /// Find a route by path, method, and subdomain
     /// ## Args
     /// - path: &str
@@ -128,7 +109,7 @@ impl Router {
     /// - subdomain: Option<&str>
     /// ## Returns
     /// - Option<&Route>
-    pub fn find_route(
+    pub(crate) fn find_route(
         &self,
         path: &str,
         method: &HttpMethod,
@@ -168,7 +149,7 @@ impl Router {
     /// - request_path: &str
     /// ## Returns
     /// - std::collections::HashMap<String, String>
-    pub fn extract_params(
+    pub(crate) fn extract_params(
         &self,
         route: &Route,
         request_path: &str,

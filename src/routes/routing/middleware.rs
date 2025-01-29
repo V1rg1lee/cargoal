@@ -1,6 +1,6 @@
-use super::super::http::request::Request;
-use super::super::http::response::Response;
+use super::super::http::Request;
+use super::super::http::Response;
 use std::sync::Arc;
 
 /// Define the Middleware type
-pub type Middleware = Arc<dyn Fn(&Request) -> Option<Response> + Send + Sync>;
+pub(crate) type Middleware = Arc<dyn Fn(&Request) -> Option<Response> + Send + Sync>;

@@ -1,6 +1,6 @@
-use super::super::http::method::HttpMethod;
-use super::super::http::request::Request;
-use super::super::http::response::Response;
+use super::super::http::HttpMethod;
+use super::super::http::Request;
+use super::super::http::Response;
 use super::super::server::Server;
 use super::middleware::Middleware;
 use std::collections::HashMap;

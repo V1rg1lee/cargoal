@@ -1,5 +1,5 @@
-use cargoal::routes::http::response::Response;
-use cargoal::routes::http::request::Request;
+use cargoal::routes::http::Response;
+use cargoal::routes::http::Request;
 use std::collections::HashMap;
 
 #[cfg(test)]
