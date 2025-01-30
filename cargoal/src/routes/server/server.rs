@@ -8,16 +8,22 @@ use super::super::routing::RouteBuilder;
 use super::super::routing::Router;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::fs;
 
 /// Define the Server struct
 /// ## Fields
 /// - address: String
 /// - router: Router
 /// - template_dirs: Vec<String>
+/// - static_dirs: String
+/// - max_static_file_size: usize
 pub struct Server {
     address: String,
     pub router: Router,
     pub(crate) template_dirs: Vec<String>,
+    pub(crate) static_dirs: String,
+    pub(crate) max_static_file_size: usize,
 }
 
 /// Implement the Server struct
@@ -32,6 +38,8 @@ impl Server {
             address: address.to_string(),
             router: Router::new(),
             template_dirs: vec!["templates".to_string()],
+            static_dirs: "static".to_string(),
+            max_static_file_size: 5 * 1024 * 1024,
         }
     }
 
@@ -43,9 +51,31 @@ impl Server {
     /// ## Args
     /// - dirs: Vec<&str>
     /// ## Returns
-    /// - Server
+    /// - &mut Self
     pub fn with_template_dirs(&mut self, dirs: Vec<&str>) -> &mut Self {
         self.template_dirs = dirs.into_iter().map(String::from).collect();
+        self
+    }
+
+    /// Add a static directory to the Server
+    /// ## Args
+    /// - self
+    /// - dir: &str
+    /// ## Returns
+    /// - &mut Self
+    pub fn with_static_dir(&mut self, dir: &str) -> &mut Self {
+        self.static_dirs = dir.to_string();
+        self
+    }
+
+    /// Set the maximum file size for static files
+    /// ## Args
+    /// - self
+    /// - size: usize
+    /// ## Returns
+    /// - &mut Self
+    pub fn with_max_static_file_size(&mut self, size: usize) -> &mut Self {
+        self.max_static_file_size = size;
         self
     }
 
@@ -56,6 +86,75 @@ impl Server {
     /// - TemplateRenderer
     pub(crate) fn get_template_renderer(&self) -> TemplateRenderer {
         TemplateRenderer::new(self.template_dirs.iter().map(String::as_str).collect())
+    }
+
+    /// Detect the MIME type of a file based on its extension
+    /// ## Args
+    /// - path: &str
+    /// ## Returns
+    /// - &str
+    fn detect_mime_type(path: &Path) -> &str {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("css") => "text/css",
+            Some("js") => "application/javascript",
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("gif") => "image/gif",
+            Some("ico") => "image/x-icon",
+            Some("svg") => "image/svg+xml",
+            Some("woff") => "font/woff",
+            Some("woff2") => "font/woff2",
+            Some("ttf") => "font/ttf",
+            Some("otf") => "font/otf",
+            Some("json") => "application/json",
+            Some("xml") => "application/xml",
+            _ => "application/octet-stream",
+        }
+    }
+
+    /// Check if a file is forbidden
+    /// ## Args
+    /// - path: &Path
+    /// ## Returns
+    /// - bool
+    fn is_forbidden_file(path: &Path) -> bool {
+        if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+            match ext {
+                "php" | "exe" | "sh" | "bat" | "cmd" => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Sanitize a static path
+    /// ## Args
+    /// - self
+    /// - requested_file: &str
+    /// ## Returns
+    /// - Option<PathBuf>
+    fn sanitize_static_path(&self, requested_file: &str) -> Option<PathBuf> {
+        if requested_file.contains("..") || requested_file.contains("./") || requested_file.contains(".\\") {
+            return None;
+        }
+        if requested_file.starts_with('/') || requested_file.starts_with('\\') {
+            return None;
+        }
+    
+        let root = PathBuf::from(&self.static_dirs).canonicalize().ok()?;
+        let mut candidate = root.clone();
+        candidate.push(requested_file);
+    
+        if candidate.is_symlink() {
+            return None;
+        }
+    
+        let candidate = candidate.canonicalize().ok()?;
+        if candidate.starts_with(&root) {
+            Some(candidate)
+        } else {
+            None
+        }
     }
 
     /// Add a group of routes to the server
@@ -109,6 +208,51 @@ impl Server {
         println!("Request received:\n{}", request_str);
 
         let mut request = parse_request(&request_str);
+
+        if request.path.starts_with("/static/") {
+            let requested_file = &request.path[8..];
+            if let Some(safe_path) = self.sanitize_static_path(requested_file) {
+                if safe_path.is_dir() || Self::is_forbidden_file(&safe_path) {
+                    let response = Response::new(403, Some("Forbidden".to_string()));
+                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.flush().unwrap();
+                    return;
+                }
+
+                if let Ok(metadata) = fs::metadata(&safe_path) {
+                    if metadata.len() > self.max_static_file_size as u64 {
+                        let response = Response::new(413, Some("Payload Too Large".to_string()));
+                        stream.write(format_response(response).as_bytes()).unwrap();
+                        stream.flush().unwrap();
+                        return;
+                    }
+                }
+        
+                if safe_path.exists() && safe_path.is_file() {
+                    match fs::read(&safe_path) {
+                        Ok(content) => {
+                            let response = Response::new(200, Some(String::from_utf8_lossy(&content).to_string()))
+                                .with_header("Content-Type", Self::detect_mime_type(&safe_path))
+                                .with_header("X-Content-Type-Options", "nosniff") 
+                                .with_header("X-Frame-Options", "DENY");
+                            stream.write(format_response(response).as_bytes()).unwrap();
+                        }
+                        Err(_) => {
+                            let response = Response::new(500, Some("Internal Server Error".to_string()));
+                            stream.write(format_response(response).as_bytes()).unwrap();
+                        }
+                    }
+                } else {
+                    let response = Response::new(404, Some("File Not Found".to_string()));
+                    stream.write(format_response(response).as_bytes()).unwrap();
+                }
+            } else {
+                let response = Response::new(403, Some("Forbidden".to_string()));
+                stream.write(format_response(response).as_bytes()).unwrap();
+                stream.flush().unwrap();
+            }
+            return;
+        }
 
         // Extract the subdomain from the Host header
         let subdomain = request_str

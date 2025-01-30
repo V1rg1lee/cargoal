@@ -24,6 +24,8 @@ fn test(port: u16) {
 
     // Template dir configuration
     app.with_template_dirs(vec!["tests/templates"]);
+    app.with_static_dir("tests/static");
+    app.with_max_static_file_size(5 * 1024 * 1024);
 
     // Middleware configuration
     app.router.add_middleware(logging_middleware);
@@ -77,7 +79,7 @@ fn test(port: u16) {
     app.route("/injection", HttpMethod::GET)
         .with_template("injection.html")
         .register();
-    
+
     app.route("/about", HttpMethod::GET)
         .with_template("about.html")
         .with_context(about_handler)
