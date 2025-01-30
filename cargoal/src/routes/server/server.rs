@@ -1,4 +1,4 @@
-use super::super::super::renderer::renderer::TemplateRenderer;
+use super::super::super::renderer::TemplateRenderer;
 use super::super::http::request::parse_request;
 use super::super::http::response::format_response;
 use super::super::http::HttpMethod;
@@ -44,7 +44,7 @@ impl Server {
     /// - dirs: Vec<&str>
     /// ## Returns
     /// - Server
-    pub fn with_template_dirs(mut self, dirs: Vec<&str>) -> Self {
+    pub fn with_template_dirs(&mut self, dirs: Vec<&str>) -> &mut Self {
         self.template_dirs = dirs.into_iter().map(String::from).collect();
         self
     }

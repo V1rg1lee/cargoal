@@ -5,13 +5,14 @@ use super::super::server::Server;
 use super::middleware::Middleware;
 use std::collections::HashMap;
 use std::sync::Arc;
+use minijinja::Value;
 
 /// Define the RouteBuilder struct
 /// ## Fields
 /// - path: &'a str
 /// - method: HttpMethod
 /// - template: Option<&'a str>
-/// - context_fn: Option<Box<dyn Fn(&Request) -> HashMap<&'static str, String> + Send + Sync>>
+/// - context_fn: Option<Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>>
 /// - server: &'a mut Server
 /// - handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>
 /// - subdomain: Option<String>
@@ -21,7 +22,7 @@ pub struct RouteBuilder<'a> {
     path: &'a str,
     method: HttpMethod,
     template: Option<&'a str>,
-    context_fn: Option<Box<dyn Fn(&Request) -> HashMap<&'static str, String> + Send + Sync>>,
+    context_fn: Option<Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>>,
     server: &'a mut Server,
     handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>,
     subdomain: Option<String>,
@@ -79,14 +80,21 @@ impl<'a> RouteBuilder<'a> {
     /// - self
     /// - context_fn: F
     /// ## Where
-    /// - F: Fn(&Request) -> HashMap<&'static str, String> + Send + Sync + 'static
+    /// - F: Fn(&Request) -> HashMap<String, V> + Send + Sync + 'static
+    /// - V: Into<Value>
     /// ## Returns
     /// - RouteBuilder
-    pub fn with_context<F>(mut self, context_fn: F) -> Self
+    pub fn with_context<F, V>(mut self, context_fn: F) -> Self
     where
-        F: Fn(&Request) -> HashMap<&'static str, String> + Send + Sync + 'static,
+        F: Fn(&Request) -> HashMap<String, V> + Send + Sync + 'static,
+        V: Into<Value>,
     {
-        self.context_fn = Some(Box::new(context_fn));
+        self.context_fn = Some(Box::new(move |req| {
+            context_fn(req)
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect()
+        }));
         self
     }
 
@@ -170,8 +178,6 @@ impl<'a> RouteBuilder<'a> {
 
                 // If a template is set, render it
                 let context = context_fn.as_ref().map_or_else(HashMap::new, |f| f(&req));
-                let context: HashMap<&str, &str> =
-                    context.iter().map(|(k, v)| (*k, v.as_str())).collect();
                 let rendered = template.as_ref().map_or_else(
                     || "Template not set.".to_string(),
                     |t| match renderer.render(t, &context) {
@@ -182,6 +188,7 @@ impl<'a> RouteBuilder<'a> {
                         }
                     },
                 );
+
 
                 Response::new(200, Some(rendered)).with_header("Content-Type", "text/html")
             },
