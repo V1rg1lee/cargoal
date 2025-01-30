@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use minijinja::{Environment, Value};
+use std::path::PathBuf;
 
 /// Define the Context type
 pub type Context = HashMap<String, Value>;
@@ -23,7 +24,16 @@ impl TemplateRenderer {
     /// - TemplateRenderer
     pub(crate) fn new(template_dirs: Vec<&str>) -> Self {
         let mut env = Environment::new();
-        let template_dirs: Vec<String> = template_dirs.iter().map(|s| s.to_string()).collect();
+        let template_dirs: Vec<PathBuf> = template_dirs.iter().map(PathBuf::from).collect();
+
+        env.set_auto_escape_callback(|name| {
+            if name.ends_with(".html") {
+                minijinja::AutoEscape::Html
+            } else {
+                minijinja::AutoEscape::None
+            }
+        });
+
         Self::load_templates(&mut env, &template_dirs);
 
         Self { env }
@@ -32,27 +42,39 @@ impl TemplateRenderer {
     /// Load templates into the Environment
     /// ## Args
     /// - env: &mut Environment<'static>
-    /// - dirs: &[String]
+    /// - dirs: &[PathBuf]
     /// ## Returns
     /// - ()
     /// ## Side Effects
     /// - Loads templates into the Environment
-    fn load_templates(env: &mut Environment<'static>, dirs: &[String]) {
+    fn load_templates(env: &mut Environment<'static>, dirs: &[PathBuf]) {
         for dir in dirs {
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
+
                     if path.extension().map_or(false, |ext| ext == "html") {
                         if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
-                            if let Ok(content) = fs::read_to_string(&path) {
-                                let template_name: &'static str = Box::leak(file_name.to_string().into_boxed_str());
-                                let arc_content: &'static str = Box::leak(content.into_boxed_str());
+                            match fs::read_to_string(&path) {
+                                Ok(content) => {
+                                    let template_name: &'static str =
+                                        Box::leak(file_name.to_string().into_boxed_str());
+                                    let arc_content: &'static str =
+                                        Box::leak(content.into_boxed_str());
     
-                                env.add_template(template_name, arc_content).unwrap();
+                                    if let Err(err) = env.add_template(template_name, arc_content) {
+                                        eprintln!("Error loading template '{}': {}", path.display(), err);
+                                    }
+                                }
+                                Err(err) => {
+                                    eprintln!("Impossible to read file '{}': {}", path.display(), err);
+                                }
                             }
                         }
                     }
                 }
+            } else {
+                eprintln!("Impossible to read directory '{}'", dir.display());
             }
         }
     }

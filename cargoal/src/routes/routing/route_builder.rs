@@ -147,7 +147,7 @@ impl<'a> RouteBuilder<'a> {
     /// ## Side Effects
     /// - Adds the Route to the Server's Router
     pub fn register(self) {
-        let template = self.template.map(|t| t.to_string());
+        let template = self.template.map(|t| t.to_string()).clone();
         let context_fn = self.context_fn;
         let handler = self.handler;
         let subdomain = self.subdomain;
@@ -178,19 +178,20 @@ impl<'a> RouteBuilder<'a> {
 
                 // If a template is set, render it
                 let context = context_fn.as_ref().map_or_else(HashMap::new, |f| f(&req));
-                let rendered = template.as_ref().map_or_else(
-                    || "Template not set.".to_string(),
-                    |t| match renderer.render(t, &context) {
-                        Ok(output) => output,
+                let rendered = match template.clone() {
+                    Some(t) => match renderer.render(&t, &context) {
+                        Ok(output) => return Response::new(200, Some(output)).with_header("Content-Type", "text/html"),
                         Err(err) => {
                             eprintln!("Error rendering template '{}': {}", t, err);
-                            "Error rendering template.".to_string()
+                            return Response::new(404, Some(format!("Template '{}' not found!", t)))
+                                .with_header("Content-Type", "text/html");
                         }
                     },
-                );
+                    None => "Template not set.".to_string(),
+                };
+                
 
-
-                Response::new(200, Some(rendered)).with_header("Content-Type", "text/html")
+                Response::new(500, Some(rendered)).with_header("Content-Type", "text/html")
             },
             regex.as_deref(),
         );

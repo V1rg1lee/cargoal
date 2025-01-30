@@ -49,3 +49,12 @@ pub fn include_handler(_req: &Request) -> Context {
     context.insert("content".to_string(), "Main Content Section".into());
     context
 }
+
+#[cfg(test)]
+pub fn escaping_handler(_req: &Request) -> Context {
+    let mut context = HashMap::new();
+    
+    context.insert("user_input".to_string(), "<script>alert('XSS')</script>".into());
+
+    context
+}

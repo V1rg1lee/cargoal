@@ -3,7 +3,7 @@ use super::handlers::{
     order_handler, query_test_handler, submit_handler, this_should_not_be_reached_handler,
     user_handler, users_handler,
 };
-use super::templates::{conditional_handler, filters_handler, include_handler, list_handler,about_handler, home_handler};
+use super::templates::{conditional_handler, filters_handler, include_handler, list_handler,about_handler, home_handler, escaping_handler};
 use super::middlewares::{block_middleware, block_middleware_group, logging_middleware};
 use cargoal::routes::http::HttpMethod;
 use cargoal::routes::server::Server;
@@ -57,6 +57,27 @@ fn test(port: u16) {
         .with_context(include_handler)
         .register();
 
+    app.route("/missing", HttpMethod::GET)
+        .with_template("missing.html")
+        .register();
+
+    app.route("/escaping", HttpMethod::GET)
+        .with_template("escaping.html")
+        .with_context(escaping_handler)
+        .register();
+
+    app.route("/not_allowed", HttpMethod::GET)
+        .with_template("not_allowed.txt")
+        .register();
+
+    app.route("/corrupt", HttpMethod::GET)
+        .with_template("corrupt.html")
+        .register();
+
+    app.route("/injection", HttpMethod::GET)
+        .with_template("injection.html")
+        .register();
+    
     app.route("/about", HttpMethod::GET)
         .with_template("about.html")
         .with_context(about_handler)

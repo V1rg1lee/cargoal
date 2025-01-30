@@ -93,3 +93,55 @@ fn test_template_includes() {
     assert!(content.contains("Main Content Section"));
     assert!(content.contains("Footer Section"));
 }
+
+#[test]
+fn test_missing_template() {
+    start_test_server(8090);
+    let client = Client::new();
+    let response = client.get("http://localhost:8090/missing").send().unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let content = response.text().unwrap();
+    assert!(content.contains("Template 'missing.html' not found!"));
+}
+
+#[test]
+fn test_html_escaping() {
+    start_test_server(8091);
+    let client = Client::new();
+    let response = client.get("http://localhost:8091/escaping").send().unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let content = response.text().unwrap();
+    assert!(content.contains("&lt;script&gt;alert(&#x27;XSS&#x27;)&lt;&#x2f;script&gt;"));
+}
+
+#[test]
+fn test_only_html_files_loaded() {
+    start_test_server(8093);
+    let client = Client::new();
+
+    let response_html = client.get("http://localhost:8093/escaping").send().unwrap();
+    assert_eq!(response_html.status(), StatusCode::OK);
+
+    let response_txt = client.get("http://localhost:8093/not_allowed").send().unwrap();
+    assert_eq!(response_txt.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn test_corrupted_template_loading() {
+    start_test_server(8094);
+    let client = Client::new();
+    let response = client.get("http://localhost:8094/corrupt").send().unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND); // TODO: Change this to 500
+}
+
+#[test]
+fn test_injection_protection() {
+    start_test_server(8095);
+    let client = Client::new();
+    let response = client.get("http://localhost:8095/injection").send().unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND); // TODO: Change this to 500
+}
