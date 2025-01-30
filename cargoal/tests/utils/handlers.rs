@@ -1,22 +1,5 @@
 use cargoal::routes::http::Request;
 use cargoal::routes::http::Response;
-use std::collections::HashMap;
-
-#[cfg(test)]
-pub fn home_handler(_req: &Request) -> HashMap<&'static str, String> {
-    let mut context = HashMap::new();
-    context.insert("title", "Home Page".to_string());
-    context.insert("message", "Welcome to the Home Page!".to_string());
-    context
-}
-
-#[cfg(test)]
-pub fn about_handler(_req: &Request) -> HashMap<&'static str, String> {
-    let mut context = HashMap::new();
-    context.insert("title", "About Us".to_string());
-    context.insert("message", "Learn more about us here.".to_string());
-    context
-}
 
 #[cfg(test)]
 pub fn query_test_handler(req: Request) -> Response {

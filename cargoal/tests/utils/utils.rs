@@ -1,8 +1,9 @@
 use super::handlers::{
-    about_handler, home_handler, item_handler, middleware_test_handler, options_test_handler,
+    item_handler, middleware_test_handler, options_test_handler,
     order_handler, query_test_handler, submit_handler, this_should_not_be_reached_handler,
     user_handler, users_handler,
 };
+use super::templates::{conditional_handler, filters_handler, include_handler, list_handler,about_handler, home_handler};
 use super::middlewares::{block_middleware, block_middleware_group, logging_middleware};
 use cargoal::routes::http::HttpMethod;
 use cargoal::routes::server::Server;
@@ -22,7 +23,7 @@ fn test(port: u16) {
     let mut app = Server::new(&format!("127.0.0.1:{}", port));
 
     // Template dir configuration
-    app = app.with_template_dirs(vec!["tests/templates"]);
+    app.with_template_dirs(vec!["tests/templates"]);
 
     // Middleware configuration
     app.router.add_middleware(logging_middleware);
@@ -32,12 +33,32 @@ fn test(port: u16) {
     // Define routes
     app.route("/", HttpMethod::GET)
         .with_subdomain("www")
-        .with_template("index")
+        .with_template("home.html")
         .with_context(home_handler)
         .register();
 
+    app.route("/conditional", HttpMethod::GET)
+        .with_template("conditional.html")
+        .with_context(conditional_handler)
+        .register();
+
+    app.route("/list", HttpMethod::GET)
+        .with_template("list.html")
+        .with_context(list_handler)
+        .register();
+
+    app.route("/filters", HttpMethod::GET)
+        .with_template("filters.html")
+        .with_context(filters_handler)
+        .register();
+
+    app.route("/include", HttpMethod::GET)
+        .with_template("include.html")
+        .with_context(include_handler)
+        .register();
+
     app.route("/about", HttpMethod::GET)
-        .with_template("about")
+        .with_template("about.html")
         .with_context(about_handler)
         .register();
 
