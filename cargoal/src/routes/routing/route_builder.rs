@@ -148,7 +148,7 @@ impl<'a> RouteBuilder<'a> {
     /// - self
     /// ## Side Effects
     /// - Adds the Route to the Server's Router
-    pub fn register(self) {
+    pub async fn register(self) {
         let template = self.template.map(|t| t.to_string()).clone();
         let context_fn = self.context_fn;
         let handler = self.handler;
@@ -161,8 +161,11 @@ impl<'a> RouteBuilder<'a> {
         let path = self.path.to_string();
         let method = self.method.clone();
 
+        // Prepare the router
+        let mut router = self.server.router.lock().await;
+
         // Add the route to the server
-        self.server.router.add_route(
+        router.add_route(
             subdomain.as_deref(),
             &path,
             method,

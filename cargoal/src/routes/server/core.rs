@@ -6,21 +6,24 @@ use super::super::http::Response;
 use super::super::routing::GroupBuilder;
 use super::super::routing::RouteBuilder;
 use super::super::routing::Router;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use super::super::http::Request;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Mutex;
+use std::sync::Arc;
 use std::path::{Path, PathBuf};
-use std::fs;
+use tokio::fs;
 
 /// Define the Server struct
 /// ## Fields
 /// - address: String
-/// - router: Router
+/// - router: Arc<Mutex<Router>>
 /// - template_dirs: Vec<String>
 /// - static_dirs: String
 /// - max_static_file_size: usize
 pub struct Server {
     address: String,
-    pub router: Router,
+    pub router: Arc<Mutex<Router>>,
     pub(crate) template_dirs: Vec<String>,
     pub(crate) static_dirs: String,
     pub(crate) max_static_file_size: usize,
@@ -36,7 +39,7 @@ impl Server {
     pub fn new(address: &str) -> Self {
         Self {
             address: address.to_string(),
-            router: Router::new(),
+            router: Arc::new(Mutex::new(Router::new())),
             template_dirs: vec!["templates".to_string()],
             static_dirs: "static".to_string(),
             max_static_file_size: 5 * 1024 * 1024,
@@ -123,27 +126,27 @@ impl Server {
 
     /// Sanitize a static path
     /// ## Args
-    /// - self
     /// - requested_file: &str
+    /// - static_dirs: &str
     /// ## Returns
     /// - Option<PathBuf>
-    fn sanitize_static_path(&self, requested_file: &str) -> Option<PathBuf> {
+    async fn sanitize_static_path(requested_file: &str, static_dirs: &str) -> Option<PathBuf> {
         if requested_file.contains("..") || requested_file.contains("./") || requested_file.contains(".\\") {
             return None;
         }
         if requested_file.starts_with('/') || requested_file.starts_with('\\') {
             return None;
         }
-    
-        let root = PathBuf::from(&self.static_dirs).canonicalize().ok()?;
+
+        let root = fs::canonicalize(static_dirs).await.ok()?;
         let mut candidate = root.clone();
         candidate.push(requested_file);
-    
-        if candidate.is_symlink() {
+
+        if fs::symlink_metadata(&candidate).await.ok()?.file_type().is_symlink() {
             return None;
         }
-    
-        let candidate = candidate.canonicalize().ok()?;
+
+        let candidate = fs::canonicalize(&candidate).await.ok()?;
         if candidate.starts_with(&root) {
             Some(candidate)
         } else {
@@ -176,40 +179,90 @@ impl Server {
     /// - ()
     /// ## Side Effects
     /// - Starts the server
-    pub fn run(&self) {
-        let listener = TcpListener::bind(&self.address).unwrap();
+    pub async fn run(&self) {
+        let listener = TcpListener::bind(&self.address).await.unwrap();
         println!("Server running on {}", self.address);
 
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
-            self.handle_connection(stream);
+        let router = Arc::clone(&self.router);
+
+        loop {
+            match listener.accept().await {
+                Ok((stream, _)) => {
+                    let router = Arc::clone(&router);
+                    let static_dirs = self.static_dirs.clone();
+                    let max_static_file_size = self.max_static_file_size;
+                    tokio::spawn(async move {
+                        Self::handle_connection(stream, router, static_dirs, max_static_file_size).await;
+                    });
+                }
+                Err(e) => eprintln!("Failed to accept connection: {}", e),
+            }
         }
+    }
+
+    /// Send a response to a stream
+    /// ## Args
+    /// - stream: &mut TcpStream
+    /// - response: Response
+    /// ## Returns
+    /// - ()
+    /// ## Side Effects
+    /// - Writes to the stream
+    async fn send_response(stream: &mut TcpStream, response: Response) {
+        let response_str = format_response(response);
+
+        if let Err(e) = stream.write_all(response_str.as_bytes()).await {
+            eprintln!("Error writing response: {}", e);
+        }
+
+        if let Err(e) = stream.flush().await {
+            eprintln!("Error flushing stream: {}", e);
+        }
+    }
+
+    /// Add a middleware to the server
+    /// ## Args
+    /// - self
+    /// - middleware: F
+    /// ## Where
+    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
+    /// ## Returns
+    /// - ()
+    /// ## Side Effects
+    /// - Adds a middleware to the server
+    pub async fn add_middleware<F>(&self, middleware: F)
+    where
+        F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
+    {
+        let mut router = self.router.lock().await;
+        router.middlewares.push(Arc::new(middleware));
     }
 
     /// Handle a connection
     /// ## Args
-    /// - self
     /// - stream: TcpStream
+    /// - router: Arc<Mutex<Router>>
+    /// - static_dirs: String
+    /// - max_static_file_size: usize
     /// ## Returns
     /// - ()
     /// ## Side Effects
     /// - Reads and writes to the stream
-    fn handle_connection(&self, mut stream: TcpStream) {
+    async fn handle_connection(mut stream: TcpStream, router: Arc<Mutex<Router>>, static_dirs: String, max_static_file_size: usize) {
         let mut buffer = Vec::new();
         let mut temp_buffer = [0; 1024];
 
         loop {
-            match stream.read(&mut temp_buffer) {
-                Ok(0) => break,
+            match stream.read(&mut temp_buffer).await {
+                Ok(0) => return,
                 Ok(n) => {
                     buffer.extend_from_slice(&temp_buffer[..n]);
-
                     if buffer.windows(4).any(|w| w == b"\r\n\r\n") {
                         break;
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error reading from stream: {}", e);
+                    eprintln!("Erreur de lecture de la requête: {}", e);
                     return;
                 }
             }
@@ -222,47 +275,40 @@ impl Server {
 
         if request.path.starts_with("/static/") {
             let requested_file = &request.path[8..];
-            if let Some(safe_path) = self.sanitize_static_path(requested_file) {
+            if let Some(safe_path) = Self::sanitize_static_path(requested_file, &static_dirs).await {
                 if safe_path.is_dir() || Self::is_forbidden_file(&safe_path) {
-                    let response = Response::new(403, Some("Forbidden".to_string()));
-                    stream.write_all(format_response(response).as_bytes()).unwrap();
-                    stream.flush().unwrap();
+                    Self::send_response(&mut stream, Response::new(403, Some("Forbidden".to_string()))).await;
                     return;
                 }
 
-                if let Ok(metadata) = fs::metadata(&safe_path) {
-                    if metadata.len() > self.max_static_file_size as u64 {
-                        let response = Response::new(413, Some("Payload Too Large".to_string()));
-                        stream.write_all(format_response(response).as_bytes()).unwrap();
-                        stream.flush().unwrap();
+                match fs::metadata(&safe_path).await {
+                    Ok(metadata) if metadata.len() > max_static_file_size as u64 => {
+                        Self::send_response(&mut stream, Response::new(413, Some("Payload Too Large".to_string()))).await;
                         return;
                     }
-                }
-        
-                if safe_path.exists() && safe_path.is_file() {
-                    match fs::read(&safe_path) {
-                        Ok(content) => {
-                            let response = Response::new(200, Some(String::from_utf8_lossy(&content).to_string()))
-                                .with_header("Content-Type", Self::detect_mime_type(&safe_path))
-                                .with_header("X-Content-Type-Options", "nosniff") 
-                                .with_header("X-Frame-Options", "DENY");
-                            stream.write_all(format_response(response).as_bytes()).unwrap();
-                        }
-                        Err(_) => {
-                            let response = Response::new(500, Some("Internal Server Error".to_string()));
-                            stream.write_all(format_response(response).as_bytes()).unwrap();
+                    Ok(_) => {
+                        match fs::read(&safe_path).await {
+                            Ok(content) => {
+                                let response = Response::new(200, Some(String::from_utf8_lossy(&content).to_string()))
+                                    .with_header("Content-Type", Self::detect_mime_type(&safe_path))
+                                    .with_header("X-Content-Type-Options", "nosniff")
+                                    .with_header("X-Frame-Options", "DENY");
+                                Self::send_response(&mut stream, response).await;
+                            }
+                            Err(_) => {
+                                Self::send_response(&mut stream, Response::new(500, Some("Internal Server Error".to_string()))).await;
+                            }
                         }
                     }
-                } else {
-                    let response = Response::new(404, Some("File Not Found".to_string()));
-                    stream.write_all(format_response(response).as_bytes()).unwrap();
+                    Err(_) => {
+                        Self::send_response(&mut stream, Response::new(404, Some("File Not Found".to_string()))).await;
+                    }
                 }
+                return;
             } else {
-                let response = Response::new(403, Some("Forbidden".to_string()));
-                stream.write_all(format_response(response).as_bytes()).unwrap();
-                stream.flush().unwrap();
+                Self::send_response(&mut stream, Response::new(403, Some("Forbidden".to_string()))).await;
+                return;
             }
-            return;
         }
 
         // Extract the subdomain from the Host header
@@ -288,29 +334,21 @@ impl Server {
 
         println!("Subdomain: {:?}", subdomain);
 
+        let router = router.lock().await;
+
         // Middleware execution
-        for middleware in &self.router.middlewares {
+        for middleware in &router.middlewares {
             if let Some(response) = middleware(&request) {
-                stream.write_all(format_response(response).as_bytes()).unwrap();
-                stream.flush().unwrap();
+                Self::send_response(&mut stream, response).await;
                 return;
             }
         }
 
         if request.path.ends_with('/') && request.path != "/" {
             let new_path = request.path.trim_end_matches('/').to_string();
-
-            // Verify if a route exists for the new path
-            if self
-                .router
-                .find_route(&new_path, &request.method, subdomain.as_deref())
-                .is_some()
-            {
+            if router.find_route(&new_path, &request.method, subdomain.as_deref()).is_some() {
                 let redirect_response = Response::new(301, None).with_header("Location", &new_path);
-                stream
-                    .write_all(format_response(redirect_response).as_bytes())
-                    .unwrap();
-                stream.flush().unwrap();
+                Self::send_response(&mut stream, redirect_response).await;
                 return;
             }
         }
@@ -318,55 +356,38 @@ impl Server {
         println!("Parsed request: {:?} {:?}", request.method, request.path);
 
         // Search for a matching route
-        if let Some(route) =
-            self.router
-                .find_route(&request.path, &request.method, subdomain.as_deref())
-        {
+        if let Some(route) = router.find_route(&request.path, &request.method, subdomain.as_deref()) {
             if let Some(regex) = &route.regex {
                 if !regex.is_match(&request.path) {
-                    // Check if the path matches the regex, if not return 404
-                    let response = Response::new(404, Some("Not Found".to_string()));
-                    stream.write_all(format_response(response).as_bytes()).unwrap();
-                    stream.flush().unwrap();
+                    Self::send_response(&mut stream, Response::new(404, Some("Not Found".to_string()))).await;
                     return;
                 }
             }
 
-            // Middleware execution
+            // Exécution des middlewares spécifiques à la route
             for middleware in &route.middlewares {
                 if let Some(response) = middleware(&request) {
-                    stream.write_all(format_response(response).as_bytes()).unwrap();
-                    stream.flush().unwrap();
+                    Self::send_response(&mut stream, response).await;
                     return;
                 }
             }
 
-            // Add the route params to the request
-            let route_params = self.router.extract_params(route, &request.path);
+            // Add route parameters to the request
+            let route_params = router.extract_params(route, &request.path);
             request.params.extend(route_params);
 
             let response = (route.handler)(request);
-            stream.write_all(format_response(response).as_bytes()).unwrap();
-        } else if self.router.routes.iter().any(|route| {
-            route.subdomain.as_deref() == subdomain.as_deref() && route.path == request.path
-        }) {
-            let allowed_methods = self
-                .router
-                .get_allowed_methods(&request.path, subdomain.as_deref());
-            let allow_header = allowed_methods
-                .iter()
-                .map(|method| method.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            let response = Response::new(405, Some("Method Not Allowed".to_string()))
-                .with_header("Allow", &allow_header);
-            stream.write_all(format_response(response).as_bytes()).unwrap();
+            Self::send_response(&mut stream, response).await;
         } else {
-            let response = Response::new(404, Some("Not Found".to_string()));
-            stream.write_all(format_response(response).as_bytes()).unwrap();
+            // Check if the path is allowed but the method is not
+            if router.routes.iter().any(|r| r.subdomain.as_deref() == subdomain.as_deref() && r.path == request.path) {
+                let allowed_methods = router.get_allowed_methods(&request.path, subdomain.as_deref());
+                let allow_header = allowed_methods.iter().map(|m| m.to_string()).collect::<Vec<_>>().join(", ");
+                let response = Response::new(405, Some("Method Not Allowed".to_string())).with_header("Allow", &allow_header);
+                Self::send_response(&mut stream, response).await;
+            } else {
+                Self::send_response(&mut stream, Response::new(404, Some("Not Found".to_string()))).await;
+            }
         }
-
-        stream.flush().unwrap();
     }
 }

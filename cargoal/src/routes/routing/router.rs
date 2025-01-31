@@ -4,7 +4,6 @@ use super::super::http::Response;
 use super::middleware::Middleware;
 use super::Route;
 use regex::Regex;
-use std::sync::Arc;
 
 /// Define the Router struct
 /// ## Fields
@@ -97,22 +96,6 @@ impl Router {
             })
             .map(|route| route.method.clone())
             .collect()
-    }
-
-    /// Add a middleware to the Router
-    /// ## Args
-    /// - middleware: F
-    /// ## Where
-    /// - F: Fn(&Request) -> Option<Response> + Send + Sync + 'static
-    /// ## Returns
-    /// - ()
-    /// ## Side Effects
-    /// - Adds a Middleware to the Router
-    pub fn add_middleware<F>(&mut self, middleware: F)
-    where
-        F: Fn(&Request) -> Option<Response> + Send + Sync + 'static,
-    {
-        self.middlewares.push(Arc::new(middleware));
     }
 
     /// Find a route by path, method, and subdomain

@@ -1,53 +1,57 @@
-use reqwest::blocking::Client;
+use reqwest::Client;
 use reqwest::StatusCode;
 
 mod utils;
 use utils::start_test_server;
 
-#[test]
-fn test_middleware_log() {
-    start_test_server(8086);
+#[tokio::test]
+async fn test_middleware_log() {
+    start_test_server(8086).await;
     let client = Client::new();
     let response = client
         .get("http://localhost:8086/middleware-test/log")
         .send()
+        .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.text().unwrap().contains("Middleware executed!"));
+    assert!(response.text().await.unwrap().contains("Middleware executed!"));
 }
 
-#[test]
-fn test_global_middleware_block() {
-    start_test_server(8092);
+#[tokio::test]
+async fn test_global_middleware_block() {
+    start_test_server(8092).await;
     let client = Client::new();
     let response = client
         .get("http://localhost:8092/middleware-block")
         .send()
+        .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().unwrap().contains("Forbidden by middleware"));
+    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
 }
 
-#[test]
-fn test_route_middleware_block() {
-    start_test_server(8093);
+#[tokio::test]
+async fn test_route_middleware_block() {
+    start_test_server(8093).await;
     let client = Client::new();
     let response = client
         .get("http://localhost:8093/middleware-block-2")
         .send()
+        .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().unwrap().contains("Forbidden by middleware"));
+    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
 }
 
-#[test]
-fn test_group_middleware_block() {
-    start_test_server(8094);
+#[tokio::test]
+async fn test_group_middleware_block() {
+    start_test_server(8094).await;
     let client = Client::new();
     let response = client
         .get("http://localhost:8094/middleware-block-3/block")
         .send()
+        .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().unwrap().contains("Forbidden by middleware"));
+    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
 }
