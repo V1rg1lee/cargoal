@@ -47,6 +47,9 @@ impl TemplateRenderer {
     /// - ()
     /// ## Side Effects
     /// - Loads templates into the Environment
+    /// ## Panics
+    /// - If a template cannot be loaded
+    /// - If a directory cannot be read
     fn load_templates(env: &mut Environment<'static>, dirs: &[PathBuf]) {
         for dir in dirs {
             if let Ok(entries) = fs::read_dir(dir) {
@@ -63,18 +66,18 @@ impl TemplateRenderer {
                                         Box::leak(content.into_boxed_str());
     
                                     if let Err(err) = env.add_template(template_name, arc_content) {
-                                        eprintln!("Error loading template '{}': {}", path.display(), err);
+                                        panic!("Error loading template '{}': {}", path.display(), err);
                                     }
                                 }
                                 Err(err) => {
-                                    eprintln!("Impossible to read file '{}': {}", path.display(), err);
+                                    panic!("Impossible to read file '{}': {}", path.display(), err);
                                 }
                             }
                         }
                     }
                 }
             } else {
-                eprintln!("Impossible to read directory '{}'", dir.display());
+                panic!("Impossible to read directory '{}'", dir.display());
             }
         }
     }

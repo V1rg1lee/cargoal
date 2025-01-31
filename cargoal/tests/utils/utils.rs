@@ -72,10 +72,6 @@ fn test(port: u16) {
         .with_template("not_allowed.txt")
         .register();
 
-    app.route("/corrupt", HttpMethod::GET)
-        .with_template("corrupt.html")
-        .register();
-
     app.route("/injection", HttpMethod::GET)
         .with_template("injection.html")
         .register();

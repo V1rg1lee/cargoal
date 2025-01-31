@@ -129,19 +129,10 @@ fn test_only_html_files_loaded() {
 }
 
 #[test]
-fn test_corrupted_template_loading() {
-    start_test_server(8094);
-    let client = Client::new();
-    let response = client.get("http://localhost:8094/corrupt").send().unwrap();
-
-    assert_eq!(response.status(), StatusCode::NOT_FOUND); // TODO: Change this to 500
-}
-
-#[test]
 fn test_injection_protection() {
     start_test_server(8095);
     let client = Client::new();
     let response = client.get("http://localhost:8095/injection").send().unwrap();
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND); // TODO: Change this to 500
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }

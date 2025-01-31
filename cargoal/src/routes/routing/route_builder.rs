@@ -183,7 +183,11 @@ impl<'a> RouteBuilder<'a> {
                         Ok(output) => return Response::new(200, Some(output)).with_header("Content-Type", "text/html"),
                         Err(err) => {
                             eprintln!("Error rendering template '{}': {}", t, err);
-                            return Response::new(404, Some(format!("Template '{}' not found!", t)))
+                            if err.contains("not found") {
+                                return Response::new(404, Some(format!("Template '{}' not found!", t)))
+                                    .with_header("Content-Type", "text/html");
+                            }
+                            return Response::new(500, Some(format!("Internal Server Error: {}", err)))
                                 .with_header("Content-Type", "text/html");
                         }
                     },
