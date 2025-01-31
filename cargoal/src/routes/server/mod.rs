@@ -1,3 +1,3 @@
-pub mod server;
+pub mod core;
 
-pub use server::Server;
+pub use core::Server;

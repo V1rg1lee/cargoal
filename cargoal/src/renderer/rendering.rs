@@ -56,7 +56,7 @@ impl TemplateRenderer {
                 for entry in entries.flatten() {
                     let path = entry.path();
 
-                    if path.extension().map_or(false, |ext| ext == "html") {
+                    if path.extension().is_some_and(|ext| ext == "html") {
                         if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
                             match fs::read_to_string(&path) {
                                 Ok(content) => {

@@ -66,7 +66,7 @@ impl Router {
                 None
             }
         });
-        let compiled_dynamic_regex = dynamic_regex.map(|r| Regex::new(&r).unwrap());
+        let compiled_dynamic_regex = dynamic_regex.map(|r| Regex::new(r).unwrap());
 
         self.routes.push(Route {
             subdomain: subdomain.map(|s| s.to_string()),
@@ -132,7 +132,7 @@ impl Router {
             route.method == *method
                 && (route.subdomain.as_deref() == subdomain)
                 && (route.path == path
-                    || route.regex.as_ref().map_or(false, |re| re.is_match(path)) // Correspondance regex
+                    || route.regex.as_ref().is_some_and(|re| re.is_match(path))
                     || self.match_dynamic_path(&route.path, path))
         })
     }

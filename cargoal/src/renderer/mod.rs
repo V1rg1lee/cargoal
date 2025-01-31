@@ -1,4 +1,4 @@
-pub mod renderer;
+pub mod rendering;
 
-pub(crate) use renderer::TemplateRenderer;
-pub use renderer::Context;
+pub(crate) use rendering::TemplateRenderer;
+pub use rendering::Context;

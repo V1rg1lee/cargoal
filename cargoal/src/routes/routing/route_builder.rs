@@ -7,12 +7,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use minijinja::Value;
 
+type ContextFn = Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>;
+
 /// Define the RouteBuilder struct
 /// ## Fields
 /// - path: &'a str
 /// - method: HttpMethod
 /// - template: Option<&'a str>
-/// - context_fn: Option<Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>>
+/// - context_fn: Option<ContextFn>
 /// - server: &'a mut Server
 /// - handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>
 /// - subdomain: Option<String>
@@ -22,7 +24,7 @@ pub struct RouteBuilder<'a> {
     path: &'a str,
     method: HttpMethod,
     template: Option<&'a str>,
-    context_fn: Option<Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>>,
+    context_fn: Option<ContextFn>,
     server: &'a mut Server,
     handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>,
     subdomain: Option<String>,
@@ -197,7 +199,7 @@ impl<'a> RouteBuilder<'a> {
 
                 Response::new(500, Some(rendered)).with_header("Content-Type", "text/html")
             },
-            regex.as_deref(),
+            regex,
         );
     }
 }

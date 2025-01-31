@@ -118,13 +118,7 @@ impl Server {
     /// ## Returns
     /// - bool
     fn is_forbidden_file(path: &Path) -> bool {
-        if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-            match ext {
-                "php" | "exe" | "sh" | "bat" | "cmd" => return true,
-                _ => {}
-            }
-        }
-        false
+        matches!(path.extension().and_then(|ext| ext.to_str()), Some("php" | "exe" | "sh" | "bat" | "cmd"))
     }
 
     /// Sanitize a static path
@@ -201,8 +195,25 @@ impl Server {
     /// ## Side Effects
     /// - Reads and writes to the stream
     fn handle_connection(&self, mut stream: TcpStream) {
-        let mut buffer = [0; 1024];
-        stream.read(&mut buffer).unwrap();
+        let mut buffer = Vec::new();
+        let mut temp_buffer = [0; 1024];
+
+        loop {
+            match stream.read(&mut temp_buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buffer.extend_from_slice(&temp_buffer[..n]);
+
+                    if buffer.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error reading from stream: {}", e);
+                    return;
+                }
+            }
+        }
 
         let request_str = String::from_utf8_lossy(&buffer[..]);
         println!("Request received:\n{}", request_str);
@@ -214,7 +225,7 @@ impl Server {
             if let Some(safe_path) = self.sanitize_static_path(requested_file) {
                 if safe_path.is_dir() || Self::is_forbidden_file(&safe_path) {
                     let response = Response::new(403, Some("Forbidden".to_string()));
-                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.write_all(format_response(response).as_bytes()).unwrap();
                     stream.flush().unwrap();
                     return;
                 }
@@ -222,7 +233,7 @@ impl Server {
                 if let Ok(metadata) = fs::metadata(&safe_path) {
                     if metadata.len() > self.max_static_file_size as u64 {
                         let response = Response::new(413, Some("Payload Too Large".to_string()));
-                        stream.write(format_response(response).as_bytes()).unwrap();
+                        stream.write_all(format_response(response).as_bytes()).unwrap();
                         stream.flush().unwrap();
                         return;
                     }
@@ -235,20 +246,20 @@ impl Server {
                                 .with_header("Content-Type", Self::detect_mime_type(&safe_path))
                                 .with_header("X-Content-Type-Options", "nosniff") 
                                 .with_header("X-Frame-Options", "DENY");
-                            stream.write(format_response(response).as_bytes()).unwrap();
+                            stream.write_all(format_response(response).as_bytes()).unwrap();
                         }
                         Err(_) => {
                             let response = Response::new(500, Some("Internal Server Error".to_string()));
-                            stream.write(format_response(response).as_bytes()).unwrap();
+                            stream.write_all(format_response(response).as_bytes()).unwrap();
                         }
                     }
                 } else {
                     let response = Response::new(404, Some("File Not Found".to_string()));
-                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.write_all(format_response(response).as_bytes()).unwrap();
                 }
             } else {
                 let response = Response::new(403, Some("Forbidden".to_string()));
-                stream.write(format_response(response).as_bytes()).unwrap();
+                stream.write_all(format_response(response).as_bytes()).unwrap();
                 stream.flush().unwrap();
             }
             return;
@@ -280,7 +291,7 @@ impl Server {
         // Middleware execution
         for middleware in &self.router.middlewares {
             if let Some(response) = middleware(&request) {
-                stream.write(format_response(response).as_bytes()).unwrap();
+                stream.write_all(format_response(response).as_bytes()).unwrap();
                 stream.flush().unwrap();
                 return;
             }
@@ -297,7 +308,7 @@ impl Server {
             {
                 let redirect_response = Response::new(301, None).with_header("Location", &new_path);
                 stream
-                    .write(format_response(redirect_response).as_bytes())
+                    .write_all(format_response(redirect_response).as_bytes())
                     .unwrap();
                 stream.flush().unwrap();
                 return;
@@ -315,7 +326,7 @@ impl Server {
                 if !regex.is_match(&request.path) {
                     // Check if the path matches the regex, if not return 404
                     let response = Response::new(404, Some("Not Found".to_string()));
-                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.write_all(format_response(response).as_bytes()).unwrap();
                     stream.flush().unwrap();
                     return;
                 }
@@ -324,7 +335,7 @@ impl Server {
             // Middleware execution
             for middleware in &route.middlewares {
                 if let Some(response) = middleware(&request) {
-                    stream.write(format_response(response).as_bytes()).unwrap();
+                    stream.write_all(format_response(response).as_bytes()).unwrap();
                     stream.flush().unwrap();
                     return;
                 }
@@ -335,7 +346,7 @@ impl Server {
             request.params.extend(route_params);
 
             let response = (route.handler)(request);
-            stream.write(format_response(response).as_bytes()).unwrap();
+            stream.write_all(format_response(response).as_bytes()).unwrap();
         } else if self.router.routes.iter().any(|route| {
             route.subdomain.as_deref() == subdomain.as_deref() && route.path == request.path
         }) {
@@ -350,10 +361,10 @@ impl Server {
 
             let response = Response::new(405, Some("Method Not Allowed".to_string()))
                 .with_header("Allow", &allow_header);
-            stream.write(format_response(response).as_bytes()).unwrap();
+            stream.write_all(format_response(response).as_bytes()).unwrap();
         } else {
             let response = Response::new(404, Some("Not Found".to_string()));
-            stream.write(format_response(response).as_bytes()).unwrap();
+            stream.write_all(format_response(response).as_bytes()).unwrap();
         }
 
         stream.flush().unwrap();
