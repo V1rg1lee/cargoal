@@ -60,7 +60,7 @@ fn parse_table_name(input: &DeriveInput) -> String {
     let mut table_name = input.ident.to_string().to_lowercase();
 
     for attr in &input.attrs {
-        if let Ok(Meta::NameValue(nv)) = attr.meta.clone().try_into() {
+        if let Meta::NameValue(nv) = &attr.meta {
             if attr.path().is_ident("table") {
                 if let syn::Expr::Lit(expr_lit) = &nv.value {
                     if let syn::Lit::Str(lit) = &expr_lit.lit {
@@ -98,7 +98,7 @@ fn parse_fields(input: &DeriveInput) -> (Vec<String>, Vec<String>, Vec<String>) 
         let mut is_primary_key = false;
 
         for attr in &field.attrs {
-            if let Ok(Meta::NameValue(nv)) = attr.meta.clone().try_into() {
+            if let Meta::NameValue(nv) = &attr.meta {
                 if attr.path().is_ident("column") {
                     if let syn::Expr::Lit(expr_lit) = &nv.value {
                         if let syn::Lit::Str(lit) = &expr_lit.lit {
