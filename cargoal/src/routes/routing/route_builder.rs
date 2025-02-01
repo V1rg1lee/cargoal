@@ -1,11 +1,11 @@
-use crate::routes::server::server_handle::ServerHandle;
 use crate::routes::http::method::HttpMethod;
 use crate::routes::http::request::Request;
 use crate::routes::http::response::Response;
 use crate::routes::routing::middleware::Middleware;
+use crate::routes::server::server_handle::ServerHandle;
+use minijinja::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use minijinja::Value;
 
 type ContextFn = Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>;
 
@@ -41,7 +41,7 @@ impl RouteBuilder {
     /// - server: ServerHandle
     /// ## Returns
     /// - RouteBuilder
-    pub fn new(path:  &str, method: HttpMethod, server: ServerHandle) -> Self {
+    pub fn new(path: &str, method: HttpMethod, server: ServerHandle) -> Self {
         Self {
             path: path.to_string(),
             method,
@@ -186,20 +186,28 @@ impl RouteBuilder {
                 let context = context_fn.as_ref().map_or_else(HashMap::new, |f| f(&req));
                 let rendered = match template.clone() {
                     Some(t) => match renderer.render(&t, &context) {
-                        Ok(output) => return Response::new(200, Some(output)).with_header("Content-Type", "text/html"),
+                        Ok(output) => {
+                            return Response::new(200, Some(output))
+                                .with_header("Content-Type", "text/html")
+                        }
                         Err(err) => {
                             eprintln!("Error rendering template '{}': {}", t, err);
                             if err.contains("not found") {
-                                return Response::new(404, Some(format!("Template '{}' not found!", t)))
-                                    .with_header("Content-Type", "text/html");
-                            }
-                            return Response::new(500, Some(format!("Internal Server Error: {}", err)))
+                                return Response::new(
+                                    404,
+                                    Some(format!("Template '{}' not found!", t)),
+                                )
                                 .with_header("Content-Type", "text/html");
+                            }
+                            return Response::new(
+                                500,
+                                Some(format!("Internal Server Error: {}", err)),
+                            )
+                            .with_header("Content-Type", "text/html");
                         }
                     },
                     None => "Template not set.".to_string(),
                 };
-                
 
                 Response::new(500, Some(rendered)).with_header("Content-Type", "text/html")
             },

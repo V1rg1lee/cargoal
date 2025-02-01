@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use cargoal::routes::http::Request;
 use cargoal::renderer::Context;
+use cargoal::routes::http::Request;
+use std::collections::HashMap;
 
 #[cfg(test)]
 pub fn home_handler(_req: &Request) -> Context {
@@ -53,8 +53,11 @@ pub fn include_handler(_req: &Request) -> Context {
 #[cfg(test)]
 pub fn escaping_handler(_req: &Request) -> Context {
     let mut context = HashMap::new();
-    
-    context.insert("user_input".to_string(), "<script>alert('XSS')</script>".into());
+
+    context.insert(
+        "user_input".to_string(),
+        "<script>alert('XSS')</script>".into(),
+    );
 
     context
 }

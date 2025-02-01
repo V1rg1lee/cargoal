@@ -1,6 +1,6 @@
+use minijinja::{Environment, Value};
 use std::collections::HashMap;
 use std::fs;
-use minijinja::{Environment, Value};
 use std::path::PathBuf;
 
 /// Define the Context type
@@ -16,7 +16,6 @@ pub(crate) struct TemplateRenderer {
 
 /// Implement the TemplateRenderer struct
 impl TemplateRenderer {
-
     /// Create a new TemplateRenderer instance
     /// ## Args
     /// - template_dirs: Vec<&str>
@@ -64,9 +63,13 @@ impl TemplateRenderer {
                                         Box::leak(file_name.to_string().into_boxed_str());
                                     let arc_content: &'static str =
                                         Box::leak(content.into_boxed_str());
-    
+
                                     if let Err(err) = env.add_template(template_name, arc_content) {
-                                        panic!("Error loading template '{}': {}", path.display(), err);
+                                        panic!(
+                                            "Error loading template '{}': {}",
+                                            path.display(),
+                                            err
+                                        );
                                     }
                                 }
                                 Err(err) => {
@@ -89,7 +92,11 @@ impl TemplateRenderer {
     /// - context: &HashMap<String, Value>
     /// ## Returns
     /// - Result<String, String>
-    pub(crate) fn render(&self, template_name: &str, context: &HashMap<String, Value>) -> Result<String, String> {
+    pub(crate) fn render(
+        &self,
+        template_name: &str,
+        context: &HashMap<String, Value>,
+    ) -> Result<String, String> {
         self.env
             .get_template(template_name)
             .map_err(|_| format!("Template '{}' not found!", template_name))?

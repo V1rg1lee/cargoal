@@ -15,7 +15,11 @@ async fn test_valid_user_id() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.text().await.unwrap().contains("Details about ID: 42"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Details about ID: 42"));
 }
 
 #[tokio::test]

@@ -14,7 +14,11 @@ async fn test_middleware_log() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.text().await.unwrap().contains("Middleware executed!"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Middleware executed!"));
 }
 
 #[tokio::test]
@@ -27,7 +31,11 @@ async fn test_global_middleware_block() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Forbidden by middleware"));
 }
 
 #[tokio::test]
@@ -40,7 +48,11 @@ async fn test_route_middleware_block() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Forbidden by middleware"));
 }
 
 #[tokio::test]
@@ -53,5 +65,9 @@ async fn test_group_middleware_block() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert!(response.text().await.unwrap().contains("Forbidden by middleware"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Forbidden by middleware"));
 }

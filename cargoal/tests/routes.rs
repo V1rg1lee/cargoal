@@ -28,7 +28,11 @@ async fn test_group_routes() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.text().await.unwrap().contains("Details about ID: 42"));
+    assert!(response
+        .text()
+        .await
+        .unwrap()
+        .contains("Details about ID: 42"));
 }
 
 #[tokio::test]
@@ -68,7 +72,11 @@ async fn test_unknown_route() {
 async fn test_redirect_slash_to_non_slash() {
     start_test_server(8089).await;
     let client = Client::new();
-    let response = client.get("http://localhost:8089/about/").send().await.unwrap();
+    let response = client
+        .get("http://localhost:8089/about/")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.url().as_str(), "http://localhost:8089/about");
 }
@@ -107,7 +115,11 @@ async fn test_bad_request_missing_param() {
 async fn test_method_not_allowed() {
     start_test_server(8093).await;
     let client = Client::new();
-    let response = client.delete("http://localhost:8093/about").send().await.unwrap();
+    let response = client
+        .delete("http://localhost:8093/about")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(
         response.headers().get("Allow").unwrap().to_str().unwrap(),
@@ -119,7 +131,11 @@ async fn test_method_not_allowed() {
 async fn test_custom_headers() {
     start_test_server(8094).await;
     let client = Client::new();
-    let response = client.get("http://localhost:8094/about").send().await.unwrap();
+    let response = client
+        .get("http://localhost:8094/about")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response

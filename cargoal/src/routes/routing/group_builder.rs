@@ -1,9 +1,9 @@
 use crate::routes::http::method::HttpMethod;
 use crate::routes::http::request::Request;
 use crate::routes::http::response::Response;
-use crate::routes::server::server_handle::ServerHandle;
 use crate::routes::routing::middleware::Middleware;
 use crate::routes::routing::route_builder::RouteBuilder;
+use crate::routes::server::server_handle::ServerHandle;
 use std::sync::Arc;
 
 /// Define the GroupBuilder struct
@@ -42,12 +42,12 @@ impl GroupBuilder {
     pub fn route(&mut self, path: &str, method: HttpMethod) -> RouteBuilder {
         let full_path = format!("{}{}", self.prefix, path);
         let mut route_builder = self.server.route(&full_path, method);
-    
+
         for middleware in &self.middlewares {
             let middleware_ref = Arc::clone(middleware);
             route_builder = route_builder.with_middleware(move |req| middleware_ref(req));
         }
-    
+
         route_builder
     }
 

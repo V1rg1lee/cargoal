@@ -1,21 +1,21 @@
-use crate::routes::server::core::Server;
-use crate::routes::http::method::HttpMethod;
-use crate::routes::http::request::Request;
-use crate::routes::http::response::Response;
-use crate::routes::routing::{GroupBuilder, Router};
-use crate::routes::http::response::format_response;
-use crate::routes::http::request::parse_request;
-use crate::routes::routing::RouteBuilder;
 use crate::renderer::TemplateRenderer;
+use crate::routes::http::method::HttpMethod;
+use crate::routes::http::request::parse_request;
+use crate::routes::http::request::Request;
+use crate::routes::http::response::format_response;
+use crate::routes::http::response::Response;
+use crate::routes::routing::RouteBuilder;
+use crate::routes::routing::{GroupBuilder, Router};
+use crate::routes::server::core::Server;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
+use tokio::fs;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
-use tokio::io::AsyncWriteExt;
-use tokio::io::AsyncReadExt;
-use tokio::fs;
-use std::path::Path;
+use tokio::sync::{Mutex, RwLock};
 
 /// Define the ServerHandle struct
 /// ## Fields
@@ -79,7 +79,9 @@ impl ServerHandle {
 
         tokio::spawn(async move {
             group(Arc::clone(&group_builder)).await;
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
     }
 
     /// Add a route to the Server
@@ -89,8 +91,8 @@ impl ServerHandle {
     /// ## Returns
     /// - RouteBuilder
     pub fn route(&self, path: &str, method: HttpMethod) -> RouteBuilder {
-        RouteBuilder::new(path, method, self.clone()) 
-    }    
+        RouteBuilder::new(path, method, self.clone())
+    }
 
     /// Get the router of the Server
     /// ## Returns
@@ -197,7 +199,10 @@ impl ServerHandle {
     /// ## Returns
     /// - bool
     fn is_forbidden_file(path: &Path) -> bool {
-        matches!(path.extension().and_then(|ext| ext.to_str()), Some("php" | "exe" | "sh" | "bat" | "cmd"))
+        matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("php" | "exe" | "sh" | "bat" | "cmd")
+        )
     }
 
     /// Sanitize a static file path to prevent directory traversal attacks
@@ -209,7 +214,10 @@ impl ServerHandle {
         let server = self.inner.lock().await;
         let static_dirs = &server.static_dirs;
 
-        if requested_file.contains("..") || requested_file.contains("./") || requested_file.contains(".\\") {
+        if requested_file.contains("..")
+            || requested_file.contains("./")
+            || requested_file.contains(".\\")
+        {
             return None;
         }
         if requested_file.starts_with('/') || requested_file.starts_with('\\') {
@@ -220,7 +228,12 @@ impl ServerHandle {
         let mut candidate = root.clone();
         candidate.push(requested_file);
 
-        if fs::symlink_metadata(&candidate).await.ok()?.file_type().is_symlink() {
+        if fs::symlink_metadata(&candidate)
+            .await
+            .ok()?
+            .file_type()
+            .is_symlink()
+        {
             return None;
         }
 
@@ -306,36 +319,59 @@ impl ServerHandle {
             let requested_file = &request.path[8..];
             if let Some(safe_path) = self.sanitize_static_path(requested_file).await {
                 if safe_path.is_dir() || Self::is_forbidden_file(&safe_path) {
-                    Self::send_response(&mut stream, Response::new(403, Some("Forbidden".to_string()))).await;
+                    Self::send_response(
+                        &mut stream,
+                        Response::new(403, Some("Forbidden".to_string())),
+                    )
+                    .await;
                     return;
                 }
 
                 match fs::metadata(&safe_path).await {
-                    Ok(metadata) if metadata.len() > self.inner.lock().await.max_static_file_size as u64 => {
-                        Self::send_response(&mut stream, Response::new(413, Some("Payload Too Large".to_string()))).await;
+                    Ok(metadata)
+                        if metadata.len() > self.inner.lock().await.max_static_file_size as u64 =>
+                    {
+                        Self::send_response(
+                            &mut stream,
+                            Response::new(413, Some("Payload Too Large".to_string())),
+                        )
+                        .await;
                         return;
                     }
-                    Ok(_) => {
-                        match fs::read(&safe_path).await {
-                            Ok(content) => {
-                                let response = Response::new(200, Some(String::from_utf8_lossy(&content).to_string()))
-                                    .with_header("Content-Type", Self::detect_mime_type(&safe_path))
-                                    .with_header("X-Content-Type-Options", "nosniff")
-                                    .with_header("X-Frame-Options", "DENY");
-                                Self::send_response(&mut stream, response).await;
-                            }
-                            Err(_) => {
-                                Self::send_response(&mut stream, Response::new(500, Some("Internal Server Error".to_string()))).await;
-                            }
+                    Ok(_) => match fs::read(&safe_path).await {
+                        Ok(content) => {
+                            let response = Response::new(
+                                200,
+                                Some(String::from_utf8_lossy(&content).to_string()),
+                            )
+                            .with_header("Content-Type", Self::detect_mime_type(&safe_path))
+                            .with_header("X-Content-Type-Options", "nosniff")
+                            .with_header("X-Frame-Options", "DENY");
+                            Self::send_response(&mut stream, response).await;
                         }
-                    }
+                        Err(_) => {
+                            Self::send_response(
+                                &mut stream,
+                                Response::new(500, Some("Internal Server Error".to_string())),
+                            )
+                            .await;
+                        }
+                    },
                     Err(_) => {
-                        Self::send_response(&mut stream, Response::new(404, Some("File Not Found".to_string()))).await;
+                        Self::send_response(
+                            &mut stream,
+                            Response::new(404, Some("File Not Found".to_string())),
+                        )
+                        .await;
                     }
                 }
                 return;
             } else {
-                Self::send_response(&mut stream, Response::new(403, Some("Forbidden".to_string()))).await;
+                Self::send_response(
+                    &mut stream,
+                    Response::new(403, Some("Forbidden".to_string())),
+                )
+                .await;
                 return;
             }
         }
@@ -366,7 +402,10 @@ impl ServerHandle {
         // Redirect if the path ends with a trailing slash
         if request.path.ends_with('/') && request.path != "/" {
             let new_path = request.path.trim_end_matches('/').to_string();
-            if router_lock.find_route(&new_path, &request.method, subdomain.as_deref()).is_some() {
+            if router_lock
+                .find_route(&new_path, &request.method, subdomain.as_deref())
+                .is_some()
+            {
                 let redirect_response = Response::new(301, None).with_header("Location", &new_path);
                 Self::send_response(&mut stream, redirect_response).await;
                 return;
@@ -376,10 +415,16 @@ impl ServerHandle {
         println!("Parsed request: {:?} {:?}", request.method, request.path);
 
         // Search for a matching route
-        if let Some(route) = router_lock.find_route(&request.path, &request.method, subdomain.as_deref()) {
+        if let Some(route) =
+            router_lock.find_route(&request.path, &request.method, subdomain.as_deref())
+        {
             if let Some(regex) = &route.regex {
                 if !regex.is_match(&request.path) {
-                    Self::send_response(&mut stream, Response::new(404, Some("Not Found".to_string()))).await;
+                    Self::send_response(
+                        &mut stream,
+                        Response::new(404, Some("Not Found".to_string())),
+                    )
+                    .await;
                     return;
                 }
             }
@@ -401,14 +446,27 @@ impl ServerHandle {
             Self::send_response(&mut stream, response).await;
         } else {
             // Check if the path is allowed but the method is not
-            if router_lock.routes.iter().any(|r| r.path == request.path &&  r.subdomain.as_deref() == subdomain.as_deref()) {
-                let allowed_methods = router_lock.get_allowed_methods(&request.path, subdomain.as_deref());
-                let allow_header = allowed_methods.iter().map(|m| m.to_string()).collect::<Vec<_>>().join(", ");
+            if router_lock
+                .routes
+                .iter()
+                .any(|r| r.path == request.path && r.subdomain.as_deref() == subdomain.as_deref())
+            {
+                let allowed_methods =
+                    router_lock.get_allowed_methods(&request.path, subdomain.as_deref());
+                let allow_header = allowed_methods
+                    .iter()
+                    .map(|m| m.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 let response = Response::new(405, Some("Method Not Allowed".to_string()))
                     .with_header("Allow", &allow_header);
                 Self::send_response(&mut stream, response).await;
             } else {
-                Self::send_response(&mut stream, Response::new(404, Some("Not Found".to_string()))).await;
+                Self::send_response(
+                    &mut stream,
+                    Response::new(404, Some("Not Found".to_string())),
+                )
+                .await;
             }
         }
     }

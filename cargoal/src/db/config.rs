@@ -36,7 +36,7 @@ impl DatabaseType {
     }
 
     /// Get the current database type, set by the user
-    /// 
+    ///
     /// ## Returns
     /// - Option<DatabaseType>
     fn get_db_type() -> Option<DatabaseType> {
@@ -46,14 +46,14 @@ impl DatabaseType {
     }
 
     /// Set the database type
-    /// 
+    ///
     /// ## Args
     /// - db_type: DatabaseType
-    /// 
+    ///
     /// ## Example
     /// ```rust,ignore
     /// use cargoal::db::config::{DatabaseType};
-    /// 
+    ///
     /// DatabaseType::set_db_type(DatabaseType::Postgres);
     /// ```
     pub(crate) fn set_db_type(db_type: DatabaseType) {
@@ -100,10 +100,10 @@ impl DatabaseType {
     }
 
     /// Map Rust types to generic SQL types
-    /// 
+    ///
     /// ## Args
     /// - rust_type: &str
-    /// 
+    ///
     /// ## Returns
     /// - &str
     fn rust_type_to_generic_sql(rust_type: &str) -> &str {
