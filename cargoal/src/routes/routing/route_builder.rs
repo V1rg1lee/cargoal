@@ -1,8 +1,8 @@
-use super::super::http::HttpMethod;
-use super::super::http::Request;
-use super::super::http::Response;
-use super::super::server::Server;
-use super::middleware::Middleware;
+use crate::routes::server::server_handle::ServerHandle;
+use crate::routes::http::method::HttpMethod;
+use crate::routes::http::request::Request;
+use crate::routes::http::response::Response;
+use crate::routes::routing::middleware::Middleware;
 use std::collections::HashMap;
 use std::sync::Arc;
 use minijinja::Value;
@@ -11,39 +11,39 @@ type ContextFn = Box<dyn Fn(&Request) -> HashMap<String, Value> + Send + Sync>;
 
 /// Define the RouteBuilder struct
 /// ## Fields
-/// - path: &'a str
+/// - path: String
 /// - method: HttpMethod
-/// - template: Option<&'a str>
+/// - template: Option<String>
 /// - context_fn: Option<ContextFn>
-/// - server: &'a mut Server
+/// - server: ServerHandle
 /// - handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>
 /// - subdomain: Option<String>
-/// - regex: Option<&'a str>
+/// - regex: Option<String>
 /// - middlewares: Vec<Middleware>
-pub struct RouteBuilder<'a> {
-    path: &'a str,
+pub struct RouteBuilder {
+    path: String,
     method: HttpMethod,
-    template: Option<&'a str>,
+    template: Option<String>,
     context_fn: Option<ContextFn>,
-    server: &'a mut Server,
+    server: ServerHandle,
     handler: Option<Box<dyn Fn(Request) -> Response + Send + Sync>>,
     subdomain: Option<String>,
-    regex: Option<&'a str>,
+    regex: Option<String>,
     middlewares: Vec<Middleware>,
 }
 
 /// Implement the RouteBuilder struct
-impl<'a> RouteBuilder<'a> {
+impl RouteBuilder {
     /// Create a new RouteBuilder instance
     /// ## Args
-    /// - path: &'a str
+    /// - path: &str
     /// - method: HttpMethod
-    /// - server: &'a mut Server
+    /// - server: ServerHandle
     /// ## Returns
     /// - RouteBuilder
-    pub fn new(path: &'a str, method: HttpMethod, server: &'a mut Server) -> Self {
+    pub fn new(path:  &str, method: HttpMethod, server: ServerHandle) -> Self {
         Self {
-            path,
+            path: path.to_string(),
             method,
             template: None,
             context_fn: None,
@@ -69,11 +69,11 @@ impl<'a> RouteBuilder<'a> {
     /// Set the template for the Route
     /// ## Args
     /// - self
-    /// - template_name: &'a str
+    /// - template_name: &str
     /// ## Returns
     /// - RouteBuilder
-    pub fn with_template(mut self, template_name: &'a str) -> Self {
-        self.template = Some(template_name);
+    pub fn with_template(mut self, template_name: &str) -> Self {
+        self.template = Some(template_name.to_string());
         self
     }
 
@@ -103,11 +103,11 @@ impl<'a> RouteBuilder<'a> {
     /// Set the regex for the Route
     /// ## Args
     /// - self
-    /// - regex: &'a str
+    /// - regex: &str
     /// ## Returns
     /// - RouteBuilder
-    pub fn with_regex(mut self, regex: &'a str) -> Self {
-        self.regex = Some(regex);
+    pub fn with_regex(mut self, regex: &str) -> Self {
+        self.regex = Some(regex.to_string());
         self
     }
 
@@ -157,12 +157,13 @@ impl<'a> RouteBuilder<'a> {
         let middlewares = self.middlewares.clone();
 
         // Prepare the route
-        let renderer = self.server.get_template_renderer();
+        let renderer = self.server.get_template_renderer().await;
         let path = self.path.to_string();
         let method = self.method.clone();
 
         // Prepare the router
-        let mut router = self.server.router.lock().await;
+        let router_handle = self.server.router();
+        let mut router = router_handle.write().await;
 
         // Add the route to the server
         router.add_route(
@@ -202,7 +203,7 @@ impl<'a> RouteBuilder<'a> {
 
                 Response::new(500, Some(rendered)).with_header("Content-Type", "text/html")
             },
-            regex,
+            regex.as_deref(),
         );
     }
 }

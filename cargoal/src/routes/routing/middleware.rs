@@ -1,5 +1,5 @@
-use super::super::http::Request;
-use super::super::http::Response;
+use crate::routes::http::request::Request;
+use crate::routes::http::response::Response;
 use std::sync::Arc;
 
 /// Define the Middleware type

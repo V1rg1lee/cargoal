@@ -6,7 +6,7 @@ use super::handlers::{
 use super::templates::{conditional_handler, filters_handler, include_handler, list_handler,about_handler, home_handler, escaping_handler};
 use super::middlewares::{block_middleware, block_middleware_group, logging_middleware};
 use cargoal::routes::http::HttpMethod;
-use cargoal::routes::server::Server;
+use cargoal::routes::server::ServerHandle;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -20,12 +20,12 @@ pub async fn start_test_server(port: u16) {
 
 #[cfg(test)]
 async fn test(port: u16) {
-    let mut app = Server::new(&format!("127.0.0.1:{}", port));
+    let mut app = ServerHandle::new(&format!("127.0.0.1:{}", port));
 
     // Template dir configuration
-    app.with_template_dirs(vec!["tests/templates"]);
-    app.with_static_dir("tests/static");
-    app.with_max_static_file_size(5 * 1024 * 1024);
+    app.with_template_dirs(vec!["tests/templates"]).await;
+    app.with_static_dir("tests/static").await;
+    app.with_max_static_file_size(5 * 1024 * 1024).await;
 
     // Middleware configuration
     app.add_middleware(logging_middleware).await;
@@ -96,37 +96,39 @@ async fn test(port: u16) {
         .register().await;
 
     // Grouped routes example
-    // app.with_group("/v1", |group| async move {
+    app.with_group("/v1", |group| async move {
 
-    //     group
-    //         .route("/users", HttpMethod::GET)
-    //         .with_subdomain("api")
-    //         .with_handler(users_handler)
-    //         .register()
-    //         .await;
+        let mut group = group.lock().await;
+        
+        group
+            .route("/users", HttpMethod::GET)
+            .with_subdomain("api")
+            .with_handler(users_handler)
+            .register()
+            .await;
 
-    //     group
-    //         .route("/users/:id", HttpMethod::GET)
-    //         .with_regex(r"^/v1/users/(?P<id>\d+)$")
-    //         .with_subdomain("api")
-    //         .with_handler(user_handler)
-    //         .register()
-    //         .await; // ✅ Ajout de await
+        group
+            .route("/users/:id", HttpMethod::GET)
+            .with_regex(r"^/v1/users/(?P<id>\d+)$")
+            .with_subdomain("api")
+            .with_handler(user_handler)
+            .register()
+            .await;
 
-    //     group
-    //         .route("/orders/:order_id", HttpMethod::GET)
-    //         .with_regex(r"^/v1/orders/(?P<order_id>[a-zA-Z0-9_-]+)$")
-    //         .with_handler(order_handler)
-    //         .register()
-    //         .await; // ✅ Ajout de await
+        group
+            .route("/orders/:order_id", HttpMethod::GET)
+            .with_regex(r"^/v1/orders/(?P<order_id>[a-zA-Z0-9_-]+)$")
+            .with_handler(order_handler)
+            .register()
+            .await;
 
-    //     group
-    //         .route("/items/:name", HttpMethod::GET)
-    //         .with_regex(r"^/v1/items/(?P<name>[a-zA-Z]+)$")
-    //         .with_handler(item_handler)
-    //         .register()
-    //         .await; // ✅ Ajout de await
-    // }).await;
+        group
+            .route("/items/:name", HttpMethod::GET)
+            .with_regex(r"^/v1/items/(?P<name>[a-zA-Z]+)$")
+            .with_handler(item_handler)
+            .register()
+            .await;
+    }).await;
 
     // Route with OPTIONS method
     app.route("/options-test", HttpMethod::OPTIONS)
@@ -143,14 +145,16 @@ async fn test(port: u16) {
         .with_middleware(block_middleware_group)
         .register().await;
 
-    // app.with_group("/middleware-block-3", |group| async move {
-    //     group.add_middleware(block_middleware_group);
+    app.with_group("/middleware-block-3", |group| async move {
+        let mut group = group.lock().await;
 
-    //     group
-    //         .route("/block", HttpMethod::GET)
-    //         .with_handler(this_should_not_be_reached_handler)
-    //         .register().await;
-    // }).await;
+        group.add_middleware(block_middleware_group);
+
+        group
+            .route("/block", HttpMethod::GET)
+            .with_handler(this_should_not_be_reached_handler)
+            .register().await;
+    }).await;
 
     // Start the server
     println!("Server running with all routes set up.");

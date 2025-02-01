@@ -1,31 +1,31 @@
-use super::super::http::HttpMethod;
-use super::super::http::Request;
-use super::super::http::Response;
-use super::super::server::Server;
-use super::middleware::Middleware;
-use super::route_builder::RouteBuilder;
+use crate::routes::http::method::HttpMethod;
+use crate::routes::http::request::Request;
+use crate::routes::http::response::Response;
+use crate::routes::server::server_handle::ServerHandle;
+use crate::routes::routing::middleware::Middleware;
+use crate::routes::routing::route_builder::RouteBuilder;
 use std::sync::Arc;
 
 /// Define the GroupBuilder struct
 /// ## Fields
 /// - prefix: String
-/// - server: &'a mut Server
-pub struct GroupBuilder<'a> {
+/// - server: ServerHandle
+/// - middlewares: Vec<Middleware>
+pub struct GroupBuilder {
     prefix: String,
-    server: &'a mut Server,
+    server: ServerHandle,
     middlewares: Vec<Middleware>,
 }
 
 /// Implement the GroupBuilder struct
-/// ## Methods
-impl<'a> GroupBuilder<'a> {
+impl GroupBuilder {
     /// Create a new GroupBuilder instance
     /// ## Args
     /// - prefix: &str
-    /// - server: &'a mut Server
+    /// - server: ServerHandle
     /// ## Returns
     /// - GroupBuilder
-    pub fn new(prefix: &str, server: &'a mut Server) -> Self {
+    pub fn new(prefix: &str, server: ServerHandle) -> Self {
         Self {
             prefix: prefix.to_string(),
             server,
@@ -39,17 +39,15 @@ impl<'a> GroupBuilder<'a> {
     /// - method: HttpMethod
     /// ## Returns
     /// - RouteBuilder
-    pub fn route(&mut self, path: &str, method: HttpMethod) -> RouteBuilder<'_> {
+    pub fn route(&mut self, path: &str, method: HttpMethod) -> RouteBuilder {
         let full_path = format!("{}{}", self.prefix, path);
-        let mut route_builder = self
-            .server
-            .route(Box::leak(full_path.into_boxed_str()), method);
-
+        let mut route_builder = self.server.route(&full_path, method);
+    
         for middleware in &self.middlewares {
             let middleware_ref = Arc::clone(middleware);
             route_builder = route_builder.with_middleware(move |req| middleware_ref(req));
         }
-
+    
         route_builder
     }
 

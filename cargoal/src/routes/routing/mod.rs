@@ -1,8 +1,8 @@
-pub mod group_builder;
-pub mod middleware;
-pub mod route;
-pub mod route_builder;
-pub mod router;
+pub(crate) mod group_builder;
+pub(crate) mod middleware;
+pub(crate) mod route;
+pub(crate) mod route_builder;
+pub(crate) mod router;
 
 pub use group_builder::GroupBuilder;
 pub use route::Route;

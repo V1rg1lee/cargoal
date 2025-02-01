@@ -1,3 +1,4 @@
-pub mod core;
+pub(crate) mod core;
+pub(crate) mod server_handle;
 
-pub use core::Server;
+pub use server_handle::ServerHandle;

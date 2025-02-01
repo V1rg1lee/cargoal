@@ -1,6 +1,6 @@
-pub mod method;
-pub mod request;
-pub mod response;
+pub(crate) mod method;
+pub(crate) mod request;
+pub(crate) mod response;
 
 pub use method::HttpMethod;
 pub use request::Request;

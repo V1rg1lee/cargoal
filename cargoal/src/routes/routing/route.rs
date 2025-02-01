@@ -1,7 +1,7 @@
-use super::super::http::HttpMethod;
-use super::super::http::Request;
-use super::super::http::Response;
-use super::middleware::Middleware;
+use crate::routes::http::method::HttpMethod;
+use crate::routes::http::request::Request;
+use crate::routes::http::response::Response;
+use crate::routes::routing::middleware::Middleware;
 use regex::Regex;
 
 /// Define the Route struct
