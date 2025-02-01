@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 
@@ -17,24 +18,27 @@ pub enum DatabaseType {
     Sqlite,
 }
 
-impl DatabaseType {
+impl FromStr for DatabaseType {
+    type Err = ();
+
     /// Convert a string to a DatabaseType
     ///
     /// ## Args
     /// - s: &str
     ///
     /// ## Returns
-    /// - Self if the string is a valid DatabaseType
-    /// - None otherwise
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// - Result<Self, Self::Err>
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "postgres" => Some(DatabaseType::Postgres),
-            "mysql" => Some(DatabaseType::MySql),
-            "sqlite" => Some(DatabaseType::Sqlite),
-            _ => None,
+            "postgres" => Ok(DatabaseType::Postgres),
+            "mysql" => Ok(DatabaseType::MySql),
+            "sqlite" => Ok(DatabaseType::Sqlite),
+            _ => Err(()),
         }
     }
+}
 
+impl DatabaseType {
     /// Get the current database type, set by the user
     ///
     /// ## Returns

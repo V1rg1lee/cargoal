@@ -3,6 +3,13 @@ use std::sync::Arc;
 
 use super::config::{DatabaseType, DbConfig};
 
+/// A type alias for a database table
+///
+/// A database table is a tuple of a table name and a vector of columns
+///
+/// The columns are tuples of column name, data type, and a boolean indicating if the column is nullable
+type DatabaseTable = (String, Vec<(String, String, bool)>);
+
 /// Define the DatabasePool enum
 ///
 /// ## Variants
@@ -89,20 +96,19 @@ impl Database {
     /// ## Returns
     /// () if the query is executed successfully
     /// Error otherwise
-    pub async fn execute(&self, query: &str) -> Result<sqlx::Result<()>, Error> {
-        let result = match &*self.pool {
+    pub async fn execute(&self, query: &str) -> sqlx::Result<()> {
+        match &*self.pool {
             DatabasePool::Postgres(pool) => sqlx::query(query).execute(pool).await.map(|_| ()),
             DatabasePool::MySql(pool) => sqlx::query(query).execute(pool).await.map(|_| ()),
             DatabasePool::Sqlite(pool) => sqlx::query(query).execute(pool).await.map(|_| ()),
-        };
-        Ok(result.map_err(|e| e.into()))
+        }
     }
 
     /// Fetch the tables metadata from the database (table name, columns name, data types, is nullable for each column)
     ///
     /// ## Returns
-    /// - Vec<(String, Vec<(String, String, bool)>)>
-    pub async fn fetch_tables_metadata(&self) -> Vec<(String, Vec<(String, String, bool)>)> {
+    /// - Vec<DatabaseTable>
+    pub async fn fetch_tables_metadata(&self) -> Vec<DatabaseTable> {
         let query = r#"
             SELECT table_name, column_name, data_type, is_nullable
             FROM information_schema.columns
@@ -155,7 +161,7 @@ impl Database {
                 .collect::<Vec<_>>(),
         };
 
-        let mut tables: Vec<(String, Vec<(String, String, bool)>)> = Vec::new();
+        let mut tables: Vec<DatabaseTable> = Vec::new();
 
         for (table_name, column_name, data_type, is_nullable) in rows {
             if let Some(table) = tables.iter_mut().find(|t| t.0 == table_name) {
