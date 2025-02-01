@@ -1,4 +1,4 @@
-use sqlx::{Error, MySql, Pool, Postgres, Sqlite};
+use sqlx::{Error, MySql, Pool, Postgres, Row, Sqlite};
 use std::sync::Arc;
 
 use super::config::{DatabaseType, DbConfig};
@@ -65,6 +65,8 @@ impl Database {
             }
         };
 
+        DatabaseType::set_db_type(config.db_type); // Set the database type to be used by another orm functions
+
         Ok(Self {
             pool: Arc::new(pool),
         })
@@ -94,5 +96,75 @@ impl Database {
             DatabasePool::Sqlite(pool) => sqlx::query(query).execute(pool).await.map(|_| ()),
         };
         Ok(result.map_err(|e| e.into()))
+    }
+
+    /// Fetch the tables metadata from the database (table name, columns name, data types, is nullable for each column)
+    ///
+    /// ## Returns
+    /// - Vec<(String, Vec<(String, String, bool)>)>
+    pub async fn fetch_tables_metadata(&self) -> Vec<(String, Vec<(String, String, bool)>)> {
+        let query = r#"
+            SELECT table_name, column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+            ORDER BY table_name, ordinal_position;
+        "#;
+
+        let rows = match &*self.pool {
+            DatabasePool::Postgres(pool) => sqlx::query(query)
+                .fetch_all(pool)
+                .await
+                .expect("Error retrieving metadata")
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<String, _>("table_name"),
+                        row.get::<String, _>("column_name"),
+                        row.get::<String, _>("data_type"),
+                        row.get::<String, _>("is_nullable") == "YES",
+                    )
+                })
+                .collect::<Vec<_>>(),
+            DatabasePool::MySql(pool) => sqlx::query(query)
+                .fetch_all(pool)
+                .await
+                .expect("Error retrieving metadata")
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<String, _>("table_name"),
+                        row.get::<String, _>("column_name"),
+                        row.get::<String, _>("data_type"),
+                        row.get::<String, _>("is_nullable") == "YES",
+                    )
+                })
+                .collect::<Vec<_>>(),
+            DatabasePool::Sqlite(pool) => sqlx::query(query)
+                .fetch_all(pool)
+                .await
+                .expect("Error retrieving metadata")
+                .into_iter()
+                .map(|row| {
+                    (
+                        row.get::<String, _>("table_name"),
+                        row.get::<String, _>("column_name"),
+                        row.get::<String, _>("data_type"),
+                        row.get::<String, _>("is_nullable") == "YES",
+                    )
+                })
+                .collect::<Vec<_>>(),
+        };
+
+        let mut tables: Vec<(String, Vec<(String, String, bool)>)> = Vec::new();
+
+        for (table_name, column_name, data_type, is_nullable) in rows {
+            if let Some(table) = tables.iter_mut().find(|t| t.0 == table_name) {
+                table.1.push((column_name, data_type, is_nullable));
+            } else {
+                tables.push((table_name, vec![(column_name, data_type, is_nullable)]));
+            }
+        }
+
+        tables
     }
 }

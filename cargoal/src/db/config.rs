@@ -1,4 +1,8 @@
 use std::env;
+use std::sync::OnceLock;
+use std::sync::RwLock;
+
+static DATABASE_TYPE: OnceLock<RwLock<DatabaseType>> = OnceLock::new();
 
 /// Define the DatabaseType enum
 ///
@@ -6,7 +10,7 @@ use std::env;
 /// - Postgres
 /// - MySql (same as MariaDB)
 /// - Sqlite
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum DatabaseType {
     Postgres,
     MySql,
@@ -28,6 +32,87 @@ impl DatabaseType {
             "mysql" => Some(DatabaseType::MySql),
             "sqlite" => Some(DatabaseType::Sqlite),
             _ => None,
+        }
+    }
+
+    /// Get the current database type, set by the user
+    /// 
+    /// ## Returns
+    /// - Option<DatabaseType>
+    fn get_db_type() -> Option<DatabaseType> {
+        DATABASE_TYPE
+            .get()
+            .and_then(|db| db.read().ok().map(|db_type| *db_type))
+    }
+
+    /// Set the database type
+    /// 
+    /// ## Args
+    /// - db_type: DatabaseType
+    /// 
+    /// ## Example
+    /// ```rust,ignore
+    /// use cargoal::db::config::{DatabaseType};
+    /// 
+    /// DatabaseType::set_db_type(DatabaseType::Postgres);
+    /// ```
+    pub(crate) fn set_db_type(db_type: DatabaseType) {
+        DATABASE_TYPE.get_or_init(|| RwLock::new(db_type));
+    }
+
+    /// Map Rust types to SQL types based on the database type
+    ///
+    /// ## Args
+    /// - rust_type: &str
+    ///
+    /// ## Returns
+    /// - (String, bool)
+    ///
+    /// ## Example
+    /// ```rust,ignore
+    /// use cargoal::db::config::{DatabaseType};
+    ///
+    /// let (sql_type, optional) = DatabaseType::rust_type_to_sql_type("i32");
+    ///
+    /// assert_eq!(sql_type, "INTEGER");
+    /// assert_eq!(optional, false);
+    /// ```
+    pub fn rust_type_to_sql_type(rust_type: &str) -> (String, bool) {
+        let (base_sql_type, is_nullable) = match rust_type
+            .strip_prefix("Option<")
+            .and_then(|t| t.strip_suffix('>'))
+        {
+            Some(inner_type) => (Self::rust_type_to_generic_sql(inner_type), true),
+            None => (Self::rust_type_to_generic_sql(rust_type), false),
+        };
+
+        let adapted_sql_type = match Self::get_db_type().expect("Database type not set") {
+            Self::Postgres | Self::Sqlite => base_sql_type.to_string(),
+            Self::MySql => match base_sql_type {
+                "INTEGER" => "INT".to_string(),
+                "BOOLEAN" => "TINYINT(1)".to_string(),
+                "TEXT" => "VARCHAR(255)".to_string(),
+                _ => base_sql_type.to_string(),
+            },
+        };
+
+        (adapted_sql_type, is_nullable)
+    }
+
+    /// Map Rust types to generic SQL types
+    /// 
+    /// ## Args
+    /// - rust_type: &str
+    /// 
+    /// ## Returns
+    /// - &str
+    fn rust_type_to_generic_sql(rust_type: &str) -> &str {
+        match rust_type {
+            "i32" | "u32" | "i64" | "u64" => "INTEGER",
+            "String" => "TEXT",
+            "f32" | "f64" => "REAL",
+            "bool" => "BOOLEAN",
+            _ => "TEXT",
         }
     }
 }
