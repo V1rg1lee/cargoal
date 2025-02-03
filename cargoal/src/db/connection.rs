@@ -1,14 +1,25 @@
 use sqlx::{Error, MySql, Pool, Postgres, Row, Sqlite};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use super::config::{DatabaseType, DbConfig};
 
+/// Trait to define an Entity with the following information:
+/// - TABLE_NAME: The name of the table
+/// - COLUMNS: The columns of the table
+/// - TYPES: The data types of the columns
+/// - primary_keys: The primary keys of the table
+pub trait EntityTrait {
+    const TABLE_NAME: &'static str;
+    const COLUMNS: &'static [&'static str];
+    const TYPES: &'static [&'static str];
+
+    fn primary_keys() -> Vec<&'static str>;
+}
+
+/// A type alias for a vector of strings which represents a column information
+type ColumnInfos = Vec<(String, String, bool)>; // (column_name, data_type, is_nullable)
 /// A type alias for a database table
-///
-/// A database table is a tuple of a table name and a vector of columns
-///
-/// The columns are tuples of column name, data type, and a boolean indicating if the column is nullable
-type DatabaseTable = (String, Vec<(String, String, bool)>);
+type DatabaseTable = (String, ColumnInfos);
 
 /// Define the DatabasePool enum
 ///
@@ -23,10 +34,49 @@ enum DatabasePool {
     Sqlite(Pool<Sqlite>),
 }
 
+/// Define the EntityMetadata struct
+///
+/// ## Fields
+/// - table_name: String
+/// - columns: ColumnInfos
+///
+///
+#[derive(Debug, Clone)]
+pub struct EntityMetadata {
+    pub table_name: String,
+    pub columns: ColumnInfos,
+    pub primary_keys: Vec<String>,
+}
+
+impl EntityMetadata {
+    /// Create a new EntityMetadata from a DatabaseTable
+    /// 
+    /// ## Args
+    /// - table: DatabaseTable
+    /// 
+    /// ## Returns
+    /// - Self
+    pub fn from_database_table(table: DatabaseTable) -> Self {
+        let (table_name, columns) = table;
+        let primary_keys = columns
+            .iter()
+            .filter(|(column_name, _, _)| column_name.ends_with("_id"))
+            .map(|(column_name, _, _)| column_name.clone())
+            .collect();
+
+        Self {
+            table_name,
+            columns,
+            primary_keys,
+        }
+    }
+}
+
 /// Define the Database struct
 ///
 /// ## Fields
 /// - pool: Arc<DatabasePool>
+/// - entities: Arc<tokio::sync::Mutex<HashMap<String, EntityMetadata>>>
 ///
 /// ## Methods
 /// - new: Create a new Database
@@ -34,6 +84,7 @@ enum DatabasePool {
 #[derive(Debug)]
 pub struct Database {
     pool: Arc<DatabasePool>,
+    entities: Arc<tokio::sync::Mutex<HashMap<String, EntityMetadata>>>,
 }
 
 impl Database {
@@ -76,7 +127,39 @@ impl Database {
 
         Ok(Self {
             pool: Arc::new(pool),
+            entities: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         })
+    }
+
+    /// Register an entity to the Database
+    ///
+    /// ## Args
+    /// - T: EntityTrait
+    pub async fn register_entity<T>(&self)
+    where
+        T: EntityTrait,
+    {
+        let table_name = T::TABLE_NAME;
+        let columns = T::COLUMNS;
+        let types = T::TYPES;
+        let primary_keys = T::primary_keys();
+
+        let mut column_definitions = Vec::new();
+        for (column, ty) in columns.iter().zip(types.iter()) {
+            column_definitions.push((column.to_string(), ty.to_string()));
+        }
+
+        let metadata = EntityMetadata {
+            table_name: table_name.to_string(),
+            columns: column_definitions
+                .into_iter()
+                .map(|(name, ty)| (name, ty, false))
+                .collect(),
+            primary_keys: primary_keys.into_iter().map(|s| s.to_string()).collect(),
+        };
+
+        let mut entities = self.entities.lock().await;
+        entities.insert(metadata.table_name.clone(), metadata);
     }
 
     /// Close the Database

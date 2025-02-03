@@ -146,12 +146,12 @@ fn generate_impl(
     let types_lit = types.iter().map(|t| t.as_str());
 
     let generated = quote! {
-        impl #struct_name {
-            pub const TABLE_NAME: &'static str = #table_name_lit;
-            pub const COLUMNS: &'static [&'static str] = &[#(#columns_lit),*];
-            pub const TYPES: &'static [&'static str] = &[#(#types_lit),*];
+        impl EntityTrait for #struct_name {
+            const TABLE_NAME: &'static str = #table_name_lit;
+            const COLUMNS: &'static [&'static str] = &[#(#columns_lit),*];
+            const TYPES: &'static [&'static str] = &[#(#types_lit),*];
 
-            pub fn primary_keys() -> Vec<&'static str> {
+            fn primary_keys() -> Vec<&'static str> {
                 vec![#(#primary_keys_lit),*]
             }
         }

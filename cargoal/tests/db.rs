@@ -1,5 +1,5 @@
 use cargoal::db::config::{DatabaseType, DbConfig};
-use cargoal::db::connection::Database;
+use cargoal::db::connection::{Database, EntityTrait};
 use cargoal_macros::Entity;
 
 #[tokio::test]
