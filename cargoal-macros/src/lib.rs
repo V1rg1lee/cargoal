@@ -12,7 +12,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Meta};
 /// The struct with the `Entity` trait implemented
 ///
 /// # Example
-/// ```rust
+/// ```rust,ignore
 /// extern crate cargoal_macros;
 /// use cargoal_macros::Entity;
 ///

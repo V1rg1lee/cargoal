@@ -18,8 +18,6 @@ pub trait EntityTrait {
 
 /// A type alias for a vector of strings which represents a column information
 type ColumnInfos = Vec<(String, String, bool)>; // (column_name, data_type, is_nullable)
-/// A type alias for a database table
-type DatabaseTable = (String, ColumnInfos);
 
 /// Define the DatabasePool enum
 ///
@@ -49,21 +47,16 @@ pub struct EntityMetadata {
 }
 
 impl EntityMetadata {
-    /// Create a new EntityMetadata from a DatabaseTable
-    /// 
+    /// Create a new EntityMetadata
+    ///
     /// ## Args
-    /// - table: DatabaseTable
-    /// 
+    /// - table_name: String
+    /// - columns: ColumnInfos
+    /// - primary_keys: Vec<String>
+    ///
     /// ## Returns
     /// - Self
-    pub fn from_database_table(table: DatabaseTable) -> Self {
-        let (table_name, columns) = table;
-        let primary_keys = columns
-            .iter()
-            .filter(|(column_name, _, _)| column_name.ends_with("_id"))
-            .map(|(column_name, _, _)| column_name.clone())
-            .collect();
-
+    pub fn new(table_name: String, columns: ColumnInfos, primary_keys: Vec<String>) -> Self {
         Self {
             table_name,
             columns,
@@ -187,11 +180,11 @@ impl Database {
         }
     }
 
-    /// Fetch the tables metadata from the database (table name, columns name, data types, is nullable for each column)
+    /// Fetch the tables metadata from the database (table name, columns name, data types, is nullable, is a pk for each column)
     ///
     /// ## Returns
-    /// - Vec<DatabaseTable>
-    pub async fn fetch_tables_metadata(&self) -> Vec<DatabaseTable> {
+    /// - Vec<EntityMetadata>
+    pub async fn fetch_tables_metadata(&self) -> Vec<EntityMetadata> {
         let query = r#"
             SELECT table_name, column_name, data_type, is_nullable
             FROM information_schema.columns
@@ -211,6 +204,7 @@ impl Database {
                         row.get::<String, _>("column_name"),
                         row.get::<String, _>("data_type"),
                         row.get::<String, _>("is_nullable") == "YES",
+                        row.get::<bool, _>("is_primary_key"),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -225,6 +219,7 @@ impl Database {
                         row.get::<String, _>("column_name"),
                         row.get::<String, _>("data_type"),
                         row.get::<String, _>("is_nullable") == "YES",
+                        row.get::<bool, _>("is_primary_key"),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -239,21 +234,39 @@ impl Database {
                         row.get::<String, _>("column_name"),
                         row.get::<String, _>("data_type"),
                         row.get::<String, _>("is_nullable") == "YES",
+                        row.get::<bool, _>("is_primary_key"),
                     )
                 })
                 .collect::<Vec<_>>(),
         };
 
-        let mut tables: Vec<DatabaseTable> = Vec::new();
+        let mut tables: HashMap<String, ColumnInfos> = HashMap::new();
 
-        for (table_name, column_name, data_type, is_nullable) in rows {
-            if let Some(table) = tables.iter_mut().find(|t| t.0 == table_name) {
-                table.1.push((column_name, data_type, is_nullable));
-            } else {
-                tables.push((table_name, vec![(column_name, data_type, is_nullable)]));
+        let mut primary_keys = Vec::<String>::new();
+
+        for row in rows {
+            let table_name: String = row.0;
+            let column_name: String = row.1;
+            let data_type: String = row.2;
+            let is_nullable: bool = row.3;
+            let is_primary_key: bool = row.4;
+
+            if is_primary_key {
+                primary_keys.push(column_name.clone());
             }
+
+            tables.entry(table_name.clone()).or_default().push((
+                column_name,
+                data_type,
+                is_nullable,
+            ));
         }
 
         tables
+            .into_iter()
+            .map(|(table_name, columns)| {
+                EntityMetadata::new(table_name, columns, primary_keys.clone())
+            })
+            .collect()
     }
 }
