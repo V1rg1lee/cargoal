@@ -186,10 +186,21 @@ impl Database {
     /// - Vec<EntityMetadata>
     pub async fn fetch_tables_metadata(&self) -> Vec<EntityMetadata> {
         let query = r#"
-            SELECT table_name, column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            ORDER BY table_name, ordinal_position;
+            SELECT c.table_name, 
+                c.column_name, 
+                c.data_type, 
+                c.is_nullable, 
+                CASE 
+                    WHEN kcu.column_name IS NOT NULL THEN true 
+                    ELSE false 
+                END AS is_primary_key
+            FROM information_schema.columns c
+            LEFT JOIN information_schema.key_column_usage kcu 
+                ON c.table_name = kcu.table_name 
+                AND c.column_name = kcu.column_name
+                AND c.table_schema = kcu.table_schema
+            WHERE c.table_schema = 'public'
+            ORDER BY c.table_name, c.ordinal_position;
         "#;
 
         let rows = match &*self.pool {
@@ -268,5 +279,67 @@ impl Database {
                 EntityMetadata::new(table_name, columns, primary_keys.clone())
             })
             .collect()
+    }
+
+    /// Get the metadata of an entity
+    /// 
+    /// ## Args
+    /// - table_name: &str
+    /// 
+    /// ## Returns
+    /// - Option<EntityMetadata>
+    async fn get_entity_metadata(&self, table_name: &str) -> Option<EntityMetadata> {
+        let entities = self.entities.lock().await;
+        entities.get(table_name).cloned()
+    }
+
+    /// Create a table in the database
+    /// 
+    /// ## Args
+    /// - table_name: &str
+    /// 
+    /// ## Returns
+    /// - () if the table is created successfully
+    /// - Error otherwise
+    pub async fn create_table(&self, table_name: &str) -> Result<(), Error> {
+        if let Some(metadata) = self.get_entity_metadata(table_name).await {
+            let columns = metadata.columns;
+
+            let mut query = format!("CREATE TABLE IF NOT EXISTS \"{}\" (", table_name);
+            for (i, (column_name, data_type, is_nullable)) in columns.iter().enumerate() {
+                let db_type = DatabaseType::rust_type_to_sql_type(data_type);
+                query.push_str(&format!(
+                    "{} {} {}",
+                    column_name,
+                    db_type.0,
+                    if *is_nullable { "NULL" } else { "NOT NULL" }
+                ));
+
+                if i < columns.len() - 1 {
+                    query.push_str(", ");
+                }
+            }
+            let primary_keys = metadata.primary_keys;
+            if !primary_keys.is_empty() {
+                query.push_str(", PRIMARY KEY (");
+                for (i, pk) in primary_keys.iter().enumerate() {
+                    query.push_str(pk);
+                    if i < primary_keys.len() - 1 {
+                        query.push_str(", ");
+                    }
+                }
+                query.push(')');
+            }
+            query.push_str(");");
+
+            println!("{}", query);
+
+            self.execute(&query).await
+        } else {
+            Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Table not found",
+            )))
+        }
     }
 }
